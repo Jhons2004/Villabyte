@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { GlobalConfig, ServiceItem, PortfolioProject } from './types';
+import { GlobalConfig, ServiceItem, PortfolioProject, TrustedClient } from './types';
 import { Navbar } from './components/Navbar';
 import { HeroSection } from './components/HeroSection';
 import { ServicesSection } from './components/ServicesSection';
+import { TrustedClientsSection } from './components/TrustedClientsSection';
 import { PortfolioSection } from './components/PortfolioSection';
 import { Footer } from './components/Footer';
 import { AdminCMS } from './components/AdminCMS';
@@ -23,6 +24,7 @@ export default function App() {
 
   const [services, setServices] = useState<ServiceItem[]>([]);
   const [projects, setProjects] = useState<PortfolioProject[]>([]);
+  const [trustedClients, setTrustedClients] = useState<TrustedClient[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Listen for secret keyboard shortcut (Ctrl+M or Cmd+M) and hash change
@@ -59,12 +61,14 @@ export default function App() {
     Promise.all([
       fetch('/api/config').then(res => res.json()),
       fetch('/api/services').then(res => res.json()),
-      fetch('/api/projects').then(res => res.json())
+      fetch('/api/projects').then(res => res.json()),
+      fetch('/api/trusted-clients').then(res => res.json())
     ])
-      .then(([configData, servicesData, projectsData]) => {
+      .then(([configData, servicesData, projectsData, clientsData]) => {
         if (configData) setConfig(configData);
         if (Array.isArray(servicesData)) setServices(servicesData);
         if (Array.isArray(projectsData)) setProjects(projectsData);
+        if (Array.isArray(clientsData)) setTrustedClients(clientsData);
       })
       .catch(err => console.error("Error fetching CMS data:", err))
       .finally(() => setLoading(false));
@@ -84,7 +88,7 @@ export default function App() {
       }
     } catch (err) {
       console.error("Error updating config:", err);
-      setConfig(newConfig); // optimistic update
+      setConfig(newConfig);
     }
   };
 
@@ -125,7 +129,11 @@ export default function App() {
       setProjects(prev => [...prev, newProj]);
     } catch (err) {
       console.error("Error adding project:", err);
-      const fallback: PortfolioProject = { id: `proj-${Date.now()}`, created_at: new Date().toISOString().split('T')[0], ...projectData };
+      const fallback: PortfolioProject = {
+        id: `proj-${Date.now()}`,
+        created_at: new Date().toISOString().split('T')[0],
+        ...projectData
+      };
       setProjects(prev => [...prev, fallback]);
     }
   };
@@ -137,6 +145,35 @@ export default function App() {
     } catch (err) {
       console.error("Error deleting project:", err);
       setProjects(prev => prev.filter(p => p.id !== id));
+    }
+  };
+
+  const handleAddTrustedClient = async (clientData: Omit<TrustedClient, 'id'>) => {
+    try {
+      const res = await fetch('/api/trusted-clients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(clientData)
+      });
+      const newClient = await res.json();
+      setTrustedClients(prev => [...prev, newClient]);
+    } catch (err) {
+      console.error("Error adding trusted client:", err);
+      const fallback: TrustedClient = {
+        id: `client-${Date.now()}`,
+        ...clientData
+      };
+      setTrustedClients(prev => [...prev, fallback]);
+    }
+  };
+
+  const handleDeleteTrustedClient = async (id: string) => {
+    try {
+      await fetch(`/api/trusted-clients/${id}`, { method: 'DELETE' });
+      setTrustedClients(prev => prev.filter(c => c.id !== id));
+    } catch (err) {
+      console.error("Error deleting trusted client:", err);
+      setTrustedClients(prev => prev.filter(c => c.id !== id));
     }
   };
 
@@ -176,6 +213,7 @@ export default function App() {
               }}
             />
             <ServicesSection services={services} />
+            <TrustedClientsSection clients={trustedClients} />
             <PortfolioSection projects={projects} />
             <Footer config={config} />
           </>
@@ -191,6 +229,9 @@ export default function App() {
             projects={projects}
             onAddProject={handleAddProject}
             onDeleteProject={handleDeleteProject}
+            trustedClients={trustedClients}
+            onAddTrustedClient={handleAddTrustedClient}
+            onDeleteTrustedClient={handleDeleteTrustedClient}
             onClose={() => setCurrentView('landing')}
           />
         )}

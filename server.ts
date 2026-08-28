@@ -30,11 +30,25 @@ interface PortfolioProjectItem {
   id: string;
   title: string;
   client: string;
+  client_logo?: string;
   description: string;
   technologies: string[];
   tech_docs: string;
+  architecture_details?: string;
   status: string;
+  live_url?: string;
+  images: string[];
+  enable_iframe?: boolean;
   created_at: string;
+}
+
+interface TrustedClientItem {
+  id: string;
+  name: string;
+  logo_url: string;
+  industry?: string;
+  website_url?: string;
+  featured: boolean;
 }
 
 let inMemoryConfig: GlobalConfigData = {
@@ -89,25 +103,77 @@ let inMemoryServices: ServiceItem[] = [
   }
 ];
 
+let inMemoryTrustedClients: TrustedClientItem[] = [
+  {
+    id: "client-1",
+    name: "Dirección Nacional de Calidad",
+    logo_url: "https://images.unsplash.com/photo-1572021335469-31706a17aaef?w=200&h=200&fit=crop",
+    industry: "Sector Gubernamental / Normativa",
+    website_url: "https://ejemplo-gobierno.gov",
+    featured: true
+  },
+  {
+    id: "client-2",
+    name: "Andina Logistics Corp",
+    logo_url: "https://images.unsplash.com/photo-1560179707-f14e90ef3623?w=200&h=200&fit=crop",
+    industry: "Logística y Comercio Internacional",
+    website_url: "https://andina-logistics.com",
+    featured: true
+  },
+  {
+    id: "client-3",
+    name: "Fintech Seguros Alfa",
+    logo_url: "https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=200&h=200&fit=crop",
+    industry: "Servicios Financieros & Insurtech",
+    website_url: "https://alfa-seguros.com",
+    featured: true
+  },
+  {
+    id: "client-4",
+    name: "Nexus Medical Health",
+    logo_url: "https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=200&h=200&fit=crop",
+    industry: "Salud y Telemedicina Enterprise",
+    website_url: "https://nexus-health.org",
+    featured: true
+  }
+];
+
 let inMemoryProjects: PortfolioProjectItem[] = [
   {
     id: "proj-1",
     title: "Dirección del Sistema Nacional de la Calidad",
     client: "Gobierno / Entidad Nacional",
-    description: "Implementación de un sistema de alto nivel para la gestión, control y trazabilidad de normativas técnicas a escala nacional.",
-    technologies: ["FastAPI", "PostgreSQL", "Next.js", "Python SQLAlchemy", "Tailwind CSS"],
-    tech_docs: "Arquitectura basada en microservicios backend con FastAPI y validación Pydantic estricta. PostgreSQL como base de datos relacional con índices optimizados para consultas de alta concurrencia. Frontend moderno con renderizado híbrido y seguridad enterprise.",
-    status: "En Producción",
+    client_logo: "https://images.unsplash.com/photo-1572021335469-31706a17aaef?w=200&h=200&fit=crop",
+    description: "Implementación integral de plataforma para la gestión, auditoría y trazabilidad inmutable de normativas técnicas y estándares a escala nacional.",
+    technologies: ["FastAPI", "PostgreSQL", "Next.js", "Python SQLAlchemy", "Docker", "Tailwind CSS"],
+    tech_docs: "Arquitectura basada en microservicios backend con FastAPI y validación Pydantic estricta. PostgreSQL como base de datos relacional con índices optimizados para consultas de alta concurrencia. Frontend moderno con renderizado híbrido, autenticación OAuth2 JWT y seguridad de grado gubernamental.",
+    architecture_details: "Capas desacopladas: Backend REST FastAPI asíncrono -> Repositorio SQLAlchemy con Connection Pooling -> PostgreSQL con replicación de lectura. Caché de consultas pesadas con Redis. Contenedorización en Kubernetes con balanceo NGINX.",
+    status: "En Producción (99.98% Uptime)",
+    live_url: "https://calidad-nacional-demo.villabyte.com",
+    images: [
+      "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=1000&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=1000&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1504868584819-f8e8b4b6d7e3?w=1000&auto=format&fit=crop"
+    ],
+    enable_iframe: true,
     created_at: "2026-01-15"
   },
   {
     id: "proj-2",
     title: "Plataforma de Trazabilidad Logística B2B",
     client: "Corporación Logística Andina",
-    description: "Sistema centralizado de control de flujos de inventario y trazabilidad aduanera con alertas en tiempo real.",
-    technologies: ["Node.js", "PostgreSQL", "TypeScript", "React"],
-    tech_docs: "Diseño relacional con tablas normalizadas para auditoría de eventos y transacciones en tiempo real.",
-    status: "Activo",
+    client_logo: "https://images.unsplash.com/photo-1560179707-f14e90ef3623?w=200&h=200&fit=crop",
+    description: "Sistema centralizado de control de flujos de inventario, telemetría IoT vehicular y trazabilidad aduanera en tiempo real con alertas predictivas.",
+    technologies: ["Node.js", "PostgreSQL", "TypeScript", "React", "WebSockets", "TimescaleDB"],
+    tech_docs: "Diseño relacional con tablas normalizadas para auditoría de eventos y transacciones en tiempo real. Motor de eventos WebSocket para actualización de telemetría de camiones de carga en vivo.",
+    architecture_details: "Event-Driven Architecture: Broker de mensajería para eventos de GPS y sensores -> Ingestor Node.js -> Base de datos de series temporales TimescaleDB -> Tableros analíticos en React con D3/Canvas.",
+    status: "Operativo en Producción",
+    live_url: "https://andina-tracker.villabyte.com",
+    images: [
+      "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=1000&auto=format&fit=crop",
+      "https://images.unsplash.com/photo-1618042164219-62c820f10723?w=1000&auto=format&fit=crop"
+    ],
+    enable_iframe: false,
     created_at: "2026-03-10"
   }
 ];
@@ -237,6 +303,36 @@ app.put("/api/projects/:id", (req, res) => {
 app.delete("/api/projects/:id", (req, res) => {
   const { id } = req.params;
   inMemoryProjects = inMemoryProjects.filter(p => p.id !== id);
+  res.json({ success: true, id });
+});
+
+// Trusted Clients Endpoints (CRUD for Section 4 in CMS)
+app.get("/api/trusted-clients", (req, res) => {
+  res.json(inMemoryTrustedClients);
+});
+
+app.post("/api/trusted-clients", (req, res) => {
+  const newClient: TrustedClientItem = {
+    id: `client-${Date.now()}`,
+    ...req.body
+  };
+  inMemoryTrustedClients.push(newClient);
+  res.status(201).json(newClient);
+});
+
+app.put("/api/trusted-clients/:id", (req, res) => {
+  const { id } = req.params;
+  const index = inMemoryTrustedClients.findIndex(c => c.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: "Empresa cliente no encontrada" });
+  }
+  inMemoryTrustedClients[index] = { ...inMemoryTrustedClients[index], ...req.body };
+  res.json(inMemoryTrustedClients[index]);
+});
+
+app.delete("/api/trusted-clients/:id", (req, res) => {
+  const { id } = req.params;
+  inMemoryTrustedClients = inMemoryTrustedClients.filter(c => c.id !== id);
   res.json({ success: true, id });
 });
 

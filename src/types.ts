@@ -20,9 +20,23 @@ export interface PortfolioProject {
   id: string;
   title: string;
   client: string;
+  client_logo?: string;
   description: string;
   technologies: string[];
   tech_docs: string;
+  architecture_details?: string;
   status: string;
+  live_url?: string;
+  images: string[];
+  enable_iframe?: boolean;
   created_at: string;
+}
+
+export interface TrustedClient {
+  id: string;
+  name: string;
+  logo_url: string;
+  industry?: string;
+  website_url?: string;
+  featured: boolean;
 }
