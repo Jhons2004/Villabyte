@@ -1,0 +1,7 @@
+{
+  "name": "VILLABYTE | Arquitectura y CMS a la Medida",
+  "description": "Plataforma B2B corporativa con Headless CMS integrado, arquitectura FastAPI/SQLAlchemy y diseño de altísimo nivel.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
