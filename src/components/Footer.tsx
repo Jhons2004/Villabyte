@@ -4,10 +4,9 @@ import { Code2, Mail, Phone, MapPin, Send, CheckCircle2 } from 'lucide-react';
 
 interface FooterProps {
   config: GlobalConfig;
-  onOpenAdmin: () => void;
 }
 
-export const Footer: React.FC<FooterProps> = ({ config, onOpenAdmin }) => {
+export const Footer: React.FC<FooterProps> = ({ config }) => {
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -144,14 +143,8 @@ export const Footer: React.FC<FooterProps> = ({ config, onOpenAdmin }) => {
           <div>
             &copy; {new Date().getFullYear()} {config.company_name}. Todos los derechos reservados.
           </div>
-          <div className="flex items-center gap-6">
-            <span>Arquitectura Headless CMS &bull; FastAPI + SQLAlchemy + Neon PostgreSQL</span>
-            <button
-              onClick={onOpenAdmin}
-              className="text-[#d4af37]/70 hover:text-[#d4af37] underline transition-colors uppercase font-mono tracking-wider"
-            >
-              [ Panel Admin CMS ]
-            </button>
+          <div className="flex items-center gap-6 text-gray-400">
+            <span>Soluciones Digitales &bull; Arquitectura de Software B2B</span>
           </div>
         </div>
       </div>

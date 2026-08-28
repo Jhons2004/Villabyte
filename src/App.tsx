@@ -25,6 +25,35 @@ export default function App() {
   const [projects, setProjects] = useState<PortfolioProject[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Listen for secret keyboard shortcut (Ctrl+M or Cmd+M) and hash change
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check for Ctrl+M or Cmd+M (Mac)
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'm' || e.key === 'M')) {
+        e.preventDefault();
+        setCurrentView(prev => (prev === 'admin' ? 'landing' : 'admin'));
+      }
+    };
+
+    const handleHashChange = () => {
+      if (window.location.hash === '#admin' || window.location.hash === '#cms') {
+        setCurrentView('admin');
+      }
+    };
+
+    // Check initial hash
+    if (window.location.hash === '#admin' || window.location.hash === '#cms') {
+      setCurrentView('admin');
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('hashchange', handleHashChange);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('hashchange', handleHashChange);
+    };
+  }, []);
+
   // Fetch initial data from backend API
   useEffect(() => {
     Promise.all([
@@ -148,7 +177,7 @@ export default function App() {
             />
             <ServicesSection services={services} />
             <PortfolioSection projects={projects} />
-            <Footer config={config} onOpenAdmin={() => setCurrentView('admin')} />
+            <Footer config={config} />
           </>
         )}
 
@@ -162,6 +191,7 @@ export default function App() {
             projects={projects}
             onAddProject={handleAddProject}
             onDeleteProject={handleDeleteProject}
+            onClose={() => setCurrentView('landing')}
           />
         )}
 

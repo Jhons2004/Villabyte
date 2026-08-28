@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { GlobalConfig, ServiceItem, PortfolioProject } from '../types';
-import { Settings, Layers, Briefcase, Plus, Trash2, Edit2, Save, RefreshCw, CheckCircle, Database } from 'lucide-react';
+import { Settings, Layers, Briefcase, Plus, Trash2, Edit2, Save, RefreshCw, CheckCircle, ArrowLeft, LogOut, Lock } from 'lucide-react';
 
 interface AdminCMSProps {
   config: GlobalConfig;
@@ -11,6 +11,7 @@ interface AdminCMSProps {
   projects: PortfolioProject[];
   onAddProject: (project: Omit<PortfolioProject, 'id'>) => void;
   onDeleteProject: (id: string) => void;
+  onClose?: () => void;
 }
 
 export const AdminCMS: React.FC<AdminCMSProps> = ({
@@ -21,11 +22,12 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
   onDeleteService,
   projects,
   onAddProject,
-  onDeleteProject
+  onDeleteProject,
+  onClose
 }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [loginEmail, setLoginEmail] = useState('admin@villabyte.com');
-  const [loginPassword, setLoginPassword] = useState('AdminVillabyte2026!');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loggingIn, setLoggingIn] = useState(false);
 
@@ -86,20 +88,23 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-[#070c1a] text-white flex items-center justify-center px-6 pt-24">
-        <div className="bg-[#0a1122] border border-[#d4af37]/40 rounded-2xl max-w-md w-full p-8 shadow-2xl">
-          <div className="text-center mb-6">
-            <div className="w-14 h-14 bg-[#d4af37]/20 text-[#d4af37] rounded-2xl flex items-center justify-center mx-auto mb-4 border border-[#d4af37]/30">
-              <Settings className="w-7 h-7" />
-            </div>
-            <h2 className="text-2xl font-serif font-bold">Panel Administrador B2B</h2>
-            <p className="text-xs text-gray-400 mt-1">Ingrese con sus credenciales de administrador</p>
-          </div>
+      <div className="min-h-screen bg-[#070c1a] text-white flex items-center justify-center px-6 pt-24 pb-12">
+        <div className="bg-[#0a1122] border border-[#d4af37]/40 rounded-2xl max-w-md w-full p-8 shadow-2xl relative">
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="absolute top-6 left-6 text-gray-400 hover:text-white flex items-center gap-1.5 text-xs transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" /> Volver al sitio
+            </button>
+          )}
 
-          <div className="bg-[#152033] p-4 rounded-xl border border-white/10 mb-6 text-xs text-gray-300 space-y-1">
-            <p className="text-[#d4af37] font-bold">Credenciales Administrador:</p>
-            <p>Usuario: <span className="font-mono text-white">admin@villabyte.com</span></p>
-            <p>Contraseña: <span className="font-mono text-white">AdminVillabyte2026!</span></p>
+          <div className="text-center mb-6 pt-4">
+            <div className="w-14 h-14 bg-[#d4af37]/20 text-[#d4af37] rounded-2xl flex items-center justify-center mx-auto mb-4 border border-[#d4af37]/30">
+              <Lock className="w-7 h-7" />
+            </div>
+            <h2 className="text-2xl font-serif font-bold">Panel Privado CMS</h2>
+            <p className="text-xs text-gray-400 mt-1">Acceso restringido para administración y gestión de contenidos</p>
           </div>
 
           {loginError && (
@@ -110,10 +115,11 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-xs uppercase text-gray-400 mb-1 font-semibold">Correo Administrador</label>
+              <label className="block text-xs uppercase text-gray-400 mb-1 font-semibold">Correo de Administrador</label>
               <input
                 type="email"
                 required
+                placeholder="admin@villabyte.com"
                 value={loginEmail}
                 onChange={(e) => setLoginEmail(e.target.value)}
                 className="w-full bg-[#152033] border border-white/10 rounded-xl p-3.5 text-sm text-white focus:outline-none focus:border-[#d4af37]"
@@ -124,6 +130,7 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
               <input
                 type="password"
                 required
+                placeholder="••••••••••••"
                 value={loginPassword}
                 onChange={(e) => setLoginPassword(e.target.value)}
                 className="w-full bg-[#152033] border border-white/10 rounded-xl p-3.5 text-sm text-white focus:outline-none focus:border-[#d4af37]"
@@ -134,7 +141,7 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
               disabled={loggingIn}
               className="w-full bg-[#d4af37] hover:bg-[#f3c623] text-[#0a1122] font-bold text-xs uppercase tracking-wider py-3.5 rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50 mt-2"
             >
-              {loggingIn ? 'Autenticando...' : 'Iniciar Sesión Admin CMS'}
+              {loggingIn ? 'Autenticando...' : 'Acceder al CMS'}
             </button>
           </form>
         </div>
@@ -154,6 +161,23 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({
             </div>
             <h1 className="text-3xl font-serif font-bold">Headless CMS — VILLABYTE</h1>
             <p className="text-gray-400 text-sm">Gestione dinámicamente toda la configuración global, servicios y proyectos del portafolio.</p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="bg-[#152033] hover:bg-[#1f2d45] border border-white/20 text-white px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4 text-[#d4af37]" /> Volver al Sitio Web
+              </button>
+            )}
+            <button
+              onClick={() => setIsAuthenticated(false)}
+              className="bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors"
+            >
+              <LogOut className="w-4 h-4" /> Cerrar Sesión
+            </button>
           </div>
         </div>
 
