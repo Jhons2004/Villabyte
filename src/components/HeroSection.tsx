@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { GlobalConfig } from '../types';
-import { ShieldCheck, Code, Terminal, ArrowRight, Layers } from 'lucide-react';
+import { ArrowRight, Layers, Sparkles, Shield, Cpu, Activity } from 'lucide-react';
 
 interface HeroSectionProps {
   config: GlobalConfig;
@@ -13,96 +13,270 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   onExplorePortfolio,
   onOpenContact
 }) => {
-  return (
-    <header className="relative w-full min-h-screen bg-[#0a1122] flex items-center overflow-hidden pt-20">
-      
-      {/* Decorative background vectors & nodes */}
-      <div className="absolute top-0 right-0 w-2/3 h-full bg-[#152033] opacity-40 transform -skew-x-12 translate-x-32 border-l border-white/5 pointer-events-none"></div>
-      <div className="absolute -bottom-32 -left-32 w-[30rem] h-[30rem] rounded-full border border-[#d4af37]/20 opacity-30 pointer-events-none"></div>
-      <div className="absolute top-32 right-20 w-64 h-64 border border-white/5 rounded-lg transform rotate-45 opacity-50 pointer-events-none"></div>
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [mousePos, setMousePos] = useState({ x: 0.5, y: 0.5 });
 
-      <div className="container mx-auto px-6 md:px-12 lg:px-24 relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center py-12">
+  // Hypnotic Canvas Animation (concentric harmonic rings, orbital particle stream, ethereal golden aura)
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animationFrameId: number;
+    let width = (canvas.width = canvas.parentElement?.clientWidth || window.innerWidth);
+    let height = (canvas.height = canvas.parentElement?.clientHeight || window.innerHeight);
+
+    const handleResize = () => {
+      if (!canvas || !canvas.parentElement) return;
+      width = canvas.width = canvas.parentElement.clientWidth;
+      height = canvas.height = canvas.parentElement.clientHeight;
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    // Particle nodes for subtle golden constellation
+    const particleCount = 45;
+    const particles = Array.from({ length: particleCount }, () => ({
+      x: Math.random() * width,
+      y: Math.random() * height,
+      vx: (Math.random() - 0.5) * 0.35,
+      vy: (Math.random() - 0.5) * 0.35,
+      radius: Math.random() * 1.6 + 0.6,
+      alpha: Math.random() * 0.4 + 0.2
+    }));
+
+    let angle = 0;
+
+    const render = () => {
+      angle += 0.0035;
+      ctx.clearRect(0, 0, width, height);
+
+      const centerX = width / 2;
+      const centerY = height * 0.48;
+
+      // 1. Hypnotic Ambient Radial Glow
+      const ambientGlow = ctx.createRadialGradient(
+        centerX + (mousePos.x - 0.5) * 60,
+        centerY + (mousePos.y - 0.5) * 60,
+        10,
+        centerX,
+        centerY,
+        Math.max(width, height) * 0.6
+      );
+      ambientGlow.addColorStop(0, 'rgba(212, 175, 55, 0.08)');
+      ambientGlow.addColorStop(0.3, 'rgba(16, 28, 54, 0.45)');
+      ambientGlow.addColorStop(0.7, 'rgba(5, 10, 22, 0.85)');
+      ambientGlow.addColorStop(1, 'rgba(3, 7, 18, 1)');
+
+      ctx.fillStyle = ambientGlow;
+      ctx.fillRect(0, 0, width, height);
+
+      // 2. Mesmerizing Concentric Harmonic Rings
+      const ringCount = 5;
+      for (let i = 1; i <= ringCount; i++) {
+        const baseRadius = 80 + i * 55;
+        const pulse = Math.sin(angle * 2 + i * 0.8) * 8;
+        const r = baseRadius + pulse;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
+
+        // Gradient stroke for hypnotic rotation
+        const ringGrad = ctx.createLinearGradient(
+          centerX - r,
+          centerY - r,
+          centerX + r,
+          centerY + r
+        );
+        const opacity = 0.08 + (ringCount - i) * 0.035;
+        ringGrad.addColorStop(0, `rgba(212, 175, 55, ${opacity * 1.5})`);
+        ringGrad.addColorStop(0.5, `rgba(255, 255, 255, ${opacity * 0.6})`);
+        ringGrad.addColorStop(1, `rgba(212, 175, 55, ${opacity * 0.2})`);
+
+        ctx.strokeStyle = ringGrad;
+        ctx.lineWidth = i % 2 === 0 ? 1 : 1.5;
+        ctx.setLineDash([12 + i * 4, 18 + i * 6]);
+        ctx.lineDashOffset = (i % 2 === 0 ? 1 : -1) * angle * 80;
+        ctx.stroke();
+        ctx.restore();
+
+        // Subtle orbital beads
+        const beadAngle = angle * (1.2 / i) + (i * Math.PI) / 3;
+        const beadX = centerX + Math.cos(beadAngle) * r;
+        const beadY = centerY + Math.sin(beadAngle) * r;
+
+        ctx.beginPath();
+        ctx.arc(beadX, beadY, 2, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(212, 175, 55, 0.7)';
+        ctx.shadowColor = '#d4af37';
+        ctx.shadowBlur = 10;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+
+      // 3. Fine Minimalist Precision Crosshairs & Vector Axes
+      ctx.save();
+      ctx.strokeStyle = 'rgba(212, 175, 55, 0.07)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 12]);
+      // Horizontal axis
+      ctx.beginPath();
+      ctx.moveTo(centerX - 380, centerY);
+      ctx.lineTo(centerX + 380, centerY);
+      ctx.stroke();
+      // Vertical axis
+      ctx.beginPath();
+      ctx.moveTo(centerX, centerY - 280);
+      ctx.lineTo(centerX, centerY + 280);
+      ctx.stroke();
+      ctx.restore();
+
+      // 4. Drifting Golden Dust Particles with Soft Connecting Threads
+      for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+
+        if (p.x < 0) p.x = width;
+        if (p.x > width) p.x = 0;
+        if (p.y < 0) p.y = height;
+        if (p.y > height) p.y = 0;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(212, 175, 55, ${p.alpha})`;
+        ctx.fill();
+
+        // Connect closely situated particles with subtle threads
+        for (let j = i + 1; j < particles.length; j++) {
+          const p2 = particles[j];
+          const dx = p.x - p2.x;
+          const dy = p.y - p2.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < 110) {
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(p2.x, p2.y);
+            ctx.strokeStyle = `rgba(212, 175, 55, ${0.08 * (1 - dist / 110)})`;
+            ctx.lineWidth = 0.6;
+            ctx.stroke();
+          }
+        }
+      }
+
+      animationFrameId = requestAnimationFrame(render);
+    };
+
+    render();
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [mousePos]);
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    setMousePos({ x, y });
+  };
+
+  return (
+    <header
+      onMouseMove={handleMouseMove}
+      className="relative w-full min-h-[92vh] lg:min-h-screen bg-[#030712] flex flex-col items-center justify-center overflow-hidden pt-24 pb-16 px-6 select-none"
+    >
+      {/* Hypnotic Ambient Canvas Background */}
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 w-full h-full pointer-events-none z-0"
+      />
+
+      {/* Subtle Radial Vignette for Supreme Contrast */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_20%,#030712_85%)] pointer-events-none z-0" />
+
+      {/* Main Minimalist Center Stage */}
+      <div className="relative z-10 max-w-5xl mx-auto flex flex-col items-center text-center space-y-10">
         
-        {/* Main Text Content */}
-        <div className="text-white space-y-8">
-          <div className="inline-flex items-center gap-3 px-4 py-2 bg-white/5 border border-white/10 rounded-full text-xs uppercase tracking-widest text-gray-300 backdrop-blur-sm">
-            <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#d4af37] opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-[#d4af37]"></span>
-            </span>
-            {config.company_name} — Empresa Legalmente Constituida
-          </div>
-          
-          <h1 className="text-4xl md:text-6xl lg:text-7xl font-sans font-extrabold leading-tight tracking-tighter">
-            <span className="block">{config.hero_title.split('.')[0] || "Liderando la"}</span>
-            <span className="block text-[#d4af37]">
-              {config.hero_title.split('.').slice(1).join('.') || "Transformación Digital"}
-            </span>
-          </h1>
-          
-          <p className="text-lg text-slate-400 max-w-lg leading-relaxed">
-            {config.hero_subtitle}
-          </p>
-          
-          <div className="flex flex-col sm:flex-row gap-5 pt-4">
-            <a 
-              href="#contacto"
-              onClick={onOpenContact}
-              className="px-8 py-4 bg-[#d4af37] text-[#0a1122] font-bold rounded-lg shadow-xl shadow-[#d4af37]/20 hover:scale-105 transition-transform flex items-center justify-center gap-2"
-            >
-              Cotizar Proyecto <ArrowRight className="w-4 h-4" />
-            </a>
-            <button 
-              onClick={onExplorePortfolio}
-              className="border border-[#d4af37]/30 hover:border-[#d4af37] text-white text-center font-semibold py-4 px-8 rounded-lg transition-all duration-300 bg-[#121b2d]/80 backdrop-blur-md flex items-center justify-center gap-2"
-            >
-              <Layers className="w-4 h-4 text-[#d4af37]" /> Explorar Portafolio CMS
-            </button>
-          </div>
+        {/* Hypnotic Emblem / Floating Badge */}
+        <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full bg-[#0a1122]/90 border border-[#d4af37]/30 backdrop-blur-xl shadow-2xl shadow-[#d4af37]/10 transition-transform duration-500 hover:scale-105">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#d4af37] opacity-80" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-[#d4af37]" />
+          </span>
+          <span className="text-[11px] font-mono tracking-[0.25em] uppercase text-gray-200">
+            {config.company_name || 'VILLABYTE'} &bull; INGENIERÍA CRÍTICA DE SOFTWARE
+          </span>
+          <span className="w-px h-3 bg-white/20" />
+          <span className="text-[10px] font-mono text-[#d4af37] tracking-wider font-semibold">
+            B2B &bull; 99.98% SLA
+          </span>
         </div>
 
-        {/* Visual IDE Simulation */}
-        <div className="hidden lg:flex justify-end relative">
-          <div className="relative w-full max-w-lg aspect-[4/5] rounded-2xl overflow-hidden shadow-2xl border border-white/10 bg-[#0d1117] flex flex-col z-10">
-            <div className="h-10 bg-[#161b22] border-b border-white/5 flex items-center px-4 gap-2">
-              <div className="w-3 h-3 rounded-full bg-red-500/80"></div>
-              <div className="w-3 h-3 rounded-full bg-yellow-500/80"></div>
-              <div className="w-3 h-3 rounded-full bg-green-500/80"></div>
-              <span className="ml-4 text-xs text-gray-400 font-mono flex items-center gap-1">
-                <Terminal className="w-3.5 h-3.5 text-[#d4af37]" /> villabyte-core.py
-              </span>
-            </div>
-            <div className="p-8 font-mono text-xs md:text-sm text-gray-300 opacity-90 overflow-hidden flex-1 space-y-3 leading-relaxed">
-              <p className="text-gray-500"># Entorno FastAPI + SQLAlchemy + Neon PostgreSQL</p>
-              <p><span className="text-pink-400">from</span> fastapi <span className="text-pink-400">import</span> FastAPI</p>
-              <p><span className="text-pink-400">from</span> sqlalchemy.orm <span className="text-pink-400">import</span> Session</p>
-              <p className="mt-2"><span className="text-blue-400">app</span> = FastAPI(title=<span className="text-green-300">"{config.company_name} CMS"</span>)</p>
-              <p className="mt-2 text-yellow-200">@app.get("/api/v1/status")</p>
-              <p><span className="text-pink-400">def</span> <span className="text-blue-300">get_system_status</span>():</p>
-              <p className="ml-4 text-purple-300">return {'{'}</p>
-              <p className="ml-8 text-blue-300">"status": "operational",</p>
-              <p className="ml-8 text-blue-300">"trazabilidad": "active",</p>
-              <p className="ml-8 text-blue-300">"security": "enterprise"</p>
-              <p className="ml-4 text-purple-300">{'}'}</p>
-              <p className="mt-4 text-emerald-400 font-semibold">&gt; [OK] Conectado a Neon Cloud DB.</p>
-            </div>
+        {/* Minimalist Hypnotic Typography */}
+        <div className="space-y-6 max-w-4xl">
+          <h1 className="text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-serif font-bold text-white tracking-tight leading-[1.08]">
+            Ingeniería IT a la{' '}
+            <span className="relative inline-block bg-gradient-to-r from-[#ffffff] via-[#f7e7a9] to-[#d4af37] bg-clip-text text-transparent">
+              Medida Exacta
+            </span>
+          </h1>
+
+          <p className="text-gray-300 font-light text-base sm:text-lg md:text-xl max-w-2xl mx-auto leading-relaxed tracking-wide text-balance">
+            {config.hero_subtitle ||
+              'Desarrollamos algoritmos avanzados, sistemas robustos y plataformas web corporativas. Trazabilidad y control absoluto de sus procesos.'}
+          </p>
+        </div>
+
+        {/* Minimalist Interactive Actions */}
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2 w-full max-w-md">
+          <button
+            onClick={onOpenContact}
+            className="w-full sm:w-auto px-9 py-4 rounded-full bg-[#d4af37] hover:bg-[#f3c623] text-[#030712] font-semibold text-xs tracking-[0.18em] uppercase transition-all duration-300 shadow-xl shadow-[#d4af37]/25 hover:shadow-[#d4af37]/40 hover:-translate-y-0.5 flex items-center justify-center gap-2 group"
+          >
+            <span>Iniciar Consulta</span>
+            <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1" />
+          </button>
+
+          <button
+            onClick={onExplorePortfolio}
+            className="w-full sm:w-auto px-8 py-4 rounded-full bg-white/[0.03] hover:bg-white/[0.08] text-white/90 hover:text-white border border-white/15 hover:border-[#d4af37]/60 backdrop-blur-md font-semibold text-xs tracking-[0.18em] uppercase transition-all duration-300 flex items-center justify-center gap-2"
+          >
+            <Layers className="w-4 h-4 text-[#d4af37]" />
+            <span>Explorar Casos</span>
+          </button>
+        </div>
+
+        {/* Hypnotic Telemetry Ribbon (Minimalist, sleek, high-tech) */}
+        <div className="pt-8 border-t border-white/10 w-full max-w-3xl grid grid-cols-2 sm:grid-cols-4 gap-6 text-center">
+          <div className="flex flex-col items-center">
+            <span className="text-xl sm:text-2xl font-mono font-bold text-white tracking-tight">FastAPI</span>
+            <span className="text-[10px] font-mono tracking-widest text-gray-400 uppercase mt-1">Microservicios</span>
           </div>
-          
-          {/* Floating Stats Card */}
-          <div className="absolute -bottom-6 -left-12 bg-white p-5 rounded-xl shadow-2xl max-w-[260px] z-20 border-l-4 border-[#d4af37]">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-[#f8fafc] flex items-center justify-center text-[#0a1122]">
-                <ShieldCheck className="w-6 h-6 text-[#d4af37]" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-[#0a1122] leading-none">100%</p>
-                <p className="text-xs text-gray-500 font-semibold uppercase mt-1">CMS Headless a la Medida</p>
-              </div>
-            </div>
+
+          <div className="flex flex-col items-center">
+            <span className="text-xl sm:text-2xl font-mono font-bold text-[#d4af37] tracking-tight">PostgreSQL</span>
+            <span className="text-[10px] font-mono tracking-widest text-gray-400 uppercase mt-1">Persistencia ACID</span>
+          </div>
+
+          <div className="flex flex-col items-center">
+            <span className="text-xl sm:text-2xl font-mono font-bold text-white tracking-tight">100%</span>
+            <span className="text-[10px] font-mono tracking-widest text-gray-400 uppercase mt-1">Trazabilidad</span>
+          </div>
+
+          <div className="flex flex-col items-center">
+            <span className="text-xl sm:text-2xl font-mono font-bold text-emerald-400 tracking-tight">Zero-Trust</span>
+            <span className="text-[10px] font-mono tracking-widest text-gray-400 uppercase mt-1">Seguridad</span>
           </div>
         </div>
 
       </div>
+
+      {/* Subtle Bottom Ambient Fade into Next Section */}
+      <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-[#0a1122] to-transparent pointer-events-none z-10" />
     </header>
   );
 };
