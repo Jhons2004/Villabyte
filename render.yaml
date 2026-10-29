@@ -6,7 +6,7 @@ services:
   - type: web
     name: villabyte
     runtime: node
-    region: oregon
+    region: virginia
     plan: free
     branch: main
     autoDeployTrigger: commit
