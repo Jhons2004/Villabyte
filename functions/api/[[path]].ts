@@ -121,7 +121,7 @@ function safeItem(type: string, body: Row, previous: Row = {}) {
     if (body.title !== undefined) val.title = clean(body.title, 120);
     if (body.category !== undefined) val.category = clean(body.category, 100);
     if (body.description !== undefined) val.description = clean(body.description, 1000);
-    if (body.price !== undefined) val.price = body.price === "" ? null : Number(body.price);
+    if (body.price !== undefined) val.price = body.price === "" || body.price === null ? null : Number(body.price);
     if (body.unit !== undefined) val.unit = ["servicio","desde","mes","hora"].includes(body.unit) ? body.unit : "servicio";
     if (body.active !== undefined) val.active = body.active === true;
     if (!val.title || !val.category || !validPrice(val.price)) throw Error("Datos o precio del servicio inválidos");
@@ -177,8 +177,19 @@ async function route(request: Request, env: Env): Promise<Response> {
     const data = await payload(request);
     const email = clean(data.email, 180).toLowerCase();
     const pass = clean(data.password, 250);
+    const db = getDb(env);
+    const key = await sha256((request.headers.get("cf-connecting-ip") || "unknown") + ":" + env.SESSION_SECRET);
+    const attempts = await rows(db, "SELECT failures FROM villabyte_auth_attempts WHERE key=$1 AND expires_at>NOW()", [key]);
+    if (Number(attempts[0]?.failures || 0) >= 8) return bad("Demasiados intentos; espera 15 minutos", 429);
     const expected = await sha256(env.ADMIN_PASSWORD), supplied = await sha256(pass);
-    if (email !== env.ADMIN_EMAIL.toLowerCase() || expected !== supplied) return bad("Credenciales inválidas", 401);
+    // Compare fixed-length digests without an early exit.
+    let difference = 0;
+    for (let i = 0; i < expected.length; i++) difference |= expected.charCodeAt(i) ^ supplied.charCodeAt(i);
+    if (email !== env.ADMIN_EMAIL.toLowerCase() || difference !== 0) {
+      await rows(db, "INSERT INTO villabyte_auth_attempts(key,failures,expires_at) VALUES($1,1,NOW()+INTERVAL '15 minutes') ON CONFLICT(key) DO UPDATE SET failures=CASE WHEN villabyte_auth_attempts.expires_at<NOW() THEN 1 ELSE villabyte_auth_attempts.failures+1 END,expires_at=NOW()+INTERVAL '15 minutes'", [key]);
+      return bad("Credenciales inválidas", 401);
+    }
+    await rows(db, "DELETE FROM villabyte_auth_attempts WHERE key=$1", [key]);
     return json({ success: true, user: { email } }, 200, { "Set-Cookie": await makeCookie(env, email) });
   }
   if (path === "/api/admin/logout" && method === "POST") {
