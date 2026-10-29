@@ -163,7 +163,7 @@ app.post("/api/admin/requests/:id/reply",auth,limiter,async(req,res)=>{
 async function start(){
  try{await bootstrap();}catch(e){console.error("PostgreSQL no disponible",e);}
  if(!production){const vite=await createViteServer({server:{middlewareMode:true},appType:"spa"});app.use(vite.middlewares);}
- else{const dist=path.resolve(process.cwd(),"dist");app.use(express.static(dist));app.get("*all",(_req,res)=>res.sendFile(path.join(dist,"index.html")));}
+ else{const dist=path.resolve(process.cwd(),"dist");app.use(express.static(dist));app.get("*",(_req,res)=>res.sendFile(path.join(dist,"index.html")));}
  app.listen(PORT,"0.0.0.0",()=>console.log("Villabyte listening on "+PORT));
 }
 start();
