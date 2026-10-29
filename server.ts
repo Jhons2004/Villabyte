@@ -89,14 +89,50 @@ function isAdmin(req:Request){if(secret.length<32||!adminEmail||!adminPass)retur
 const auth=(req:Request,res:Response,next:NextFunction)=>{if(!originOk(req)){res.status(403).json({error:"Origen rechazado"});return;}if(!isAdmin(req)){res.status(401).json({error:"Inicia sesión"});return;}next();};
 const limits=new Map<string,{count:number,until:number}>();
 const limiter=(req:Request,res:Response,next:NextFunction)=>{const key=(req.ip||"unknown")+req.path;let x=limits.get(key);if(!x||x.until<Date.now())x={count:0,until:Date.now()+3600000};x.count++;limits.set(key,x);if(x.count>(req.path.includes("login")?10:8)){res.status(429).json({error:"Demasiados intentos; vuelve más tarde."});return;}next();};
-async function sendEmail(to:string,subject:string,body:string){
- const key=process.env.RESEND_API_KEY,from=process.env.MAIL_FROM;
- if(!key||!from)return false;
- const r=await fetch("https://api.resend.com/emails",{method:"POST",headers:{"Authorization":"Bearer "+key,"Content-Type":"application/json"},body:JSON.stringify({from,to:[to],subject,text:body}),signal:AbortSignal.timeout(12000)});
- if(!r.ok)throw Error("Correo HTTP "+r.status);
+// Google Apps Script runs MailApp under the deploying account (not SMTP).
+// All secrets stay on this backend. Never send API_KEY to the browser.
+const appsScriptUrl=process.env.GOOGLE_APPS_SCRIPT_URL||"https://script.google.com/macros/s/AKfycbznNNt_-UqwNrL9XDnodbrfHi9KrHtCH8xRONz7N7seKT1jSPARnPR2mycLCT1Sk-RR/exec";
+const appsScriptKey=process.env.GOOGLE_APPS_SCRIPT_KEY||"";
+const replyEnabled=process.env.GOOGLE_SCRIPT_REPLY_ENABLED==="true";
+async function appsScriptPost(payload:Record<string,unknown>){
+ if(!appsScriptKey)throw new Error("Falta configurar GOOGLE_APPS_SCRIPT_KEY en el servidor");
+ const r=await fetch(appsScriptUrl,{
+  method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},
+  body:JSON.stringify({...payload,apiKey:appsScriptKey}),
+  redirect:"follow",signal:AbortSignal.timeout(18000)
+ });
+ if(!r.ok)throw new Error("Apps Script HTTP "+r.status);
+ const data=await r.json();
+ if(data?.ok!==true)throw new Error("Apps Script rechazó el envío: "+String(data?.error||"Sin detalle"));
+ return data;
+}
+async function notifyNewRequest(req:Record<string,any>){
+ if(!appsScriptKey)return false;
+ await appsScriptPost({
+  action:"new_request",name:req.name,email:req.email,phone:req.phone,
+  company:"",subject:"Solicitud "+req.id.slice(0,8)+" — "+req.service_title,
+  message:req.description+"\n\nCódigo: "+req.id+"\nServicio: "+req.service_title,
+  page:"Villabyte / Solicitud "+req.id,website:""
+ });
  return true;
 }
-app.get("/api/health",(_req,res)=>res.json({ok:true,database:dbReady,mail_configured:!!(process.env.RESEND_API_KEY&&process.env.MAIL_FROM)}));
+async function sendCustomerReply(req:Record<string,any>,message:string){
+ // Do not call legacy doPost for replies: it ALWAYS mails DESTINATION_EMAIL,
+ // and would incorrectly acknowledge an email that never reached the customer.
+ if(!replyEnabled)throw new Error("Habilita la extensión de respuestas de Apps Script antes de usar esta función. Usa Abrir en mi correo mientras tanto.");
+ const replyKey=process.env.GOOGLE_APPS_SCRIPT_REPLY_KEY||"";
+ if(!replyKey)throw new Error("Falta GOOGLE_APPS_SCRIPT_REPLY_KEY en el servidor");
+ const data=await appsScriptPost({
+  action:"reply_to_customer",replyKey,requestId:req.id,
+  recipient:req.email,subject:"Respuesta de Villabyte — solicitud "+req.id.slice(0,8),
+  message,website:""
+ });
+ // Legacy v1 returns ok:true without action/recipient; reject it.
+ if(data.action!=="reply_to_customer"||data.recipient!==req.email||data.requestId!==req.id)
+  throw new Error("Apps Script no confirmó una respuesta al cliente. Revisa la versión desplegada.");
+ return true;
+}
+app.get("/api/health",(_req,res)=>res.json({ok:true,database:dbReady,mail_configured:!!appsScriptKey,reply_configured:replyEnabled&&!!process.env.GOOGLE_APPS_SCRIPT_REPLY_KEY}));
 for(const key of ["config","services","projects","trusted-clients"])app.get("/api/"+key,async(_req,res)=>{try{res.json(await read(key));}catch{res.status(503).json({error:"Datos no disponibles"});}});
 app.post("/api/admin/login",sameOrigin,limiter,(req,res)=>{
  if(!adminEmail||!adminPass||secret.length<32){res.status(503).json({error:"Administrador sin configurar"});return;}
@@ -137,8 +173,7 @@ app.post("/api/requests",sameOrigin,limiter,async(req,res)=>{
   const request={id:crypto.randomUUID(),name,email,phone,service_id,service_title:selected.title,description,created_at:new Date().toISOString(),status:"nuevo",email_sent:false,replies:[]};
   if(pool&&dbReady)await pool.query("INSERT INTO villabyte_requests(id,name,email,phone,service_id,service_title,description,created_at,status,email_sent,replies) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,FALSE,'[]'::jsonb)",[request.id,name,email,phone,service_id,selected.title,description,request.created_at,"nuevo"]);
   else localRequests.unshift(request);
-  const owner=process.env.NOTIFY_EMAIL;
-  if(owner){try{request.email_sent=await sendEmail(owner,"Villabyte: solicitud "+request.id.slice(0,8),"Servicio: "+selected.title+"\nCliente: "+name+"\nCorreo: "+email+"\nTeléfono: "+phone+"\nDetalles: "+description+"\n\nContesta desde la bandeja de Villabyte.");if(request.email_sent&&pool&&dbReady)await pool.query("UPDATE villabyte_requests SET email_sent=TRUE WHERE id=$1",[request.id]);}catch(e){console.error("Correo de aviso no enviado",e);}}
+  if(appsScriptKey){try{request.email_sent=await notifyNewRequest(request);if(request.email_sent&&pool&&dbReady)await pool.query("UPDATE villabyte_requests SET email_sent=TRUE WHERE id=$1",[request.id]);}catch(e){console.error("Notificación por Apps Script no enviada",e);}}
   res.status(201).json({ok:true,id:request.id,notified:request.email_sent});
  }catch(e){console.error("Error registrando solicitud",e);res.status(503).json({error:"No pudimos registrar la solicitud"});}
 });
@@ -152,8 +187,7 @@ app.post("/api/admin/requests/:id/reply",auth,limiter,async(req,res)=>{
  try{
   const x=pool&&dbReady?(await pool.query("SELECT * FROM villabyte_requests WHERE id=$1",[req.params.id])).rows[0]:localRequests.find(x=>x.id===req.params.id);
   if(!x){res.status(404).json({error:"No encontrado"});return;}
-  const sent=await sendEmail(x.email,"Respuesta de Villabyte a tu solicitud",message);
-  if(!sent){res.status(503).json({error:"Falta configurar RESEND_API_KEY y MAIL_FROM"});return;}
+  await sendCustomerReply(x,message);
   const replies=[...(x.replies||[]),{date:new Date().toISOString(),text:message,sent:true}];
   if(pool&&dbReady)await pool.query("UPDATE villabyte_requests SET replies=$1::jsonb,status='contactado' WHERE id=$2",[JSON.stringify(replies),req.params.id]);
   else{x.replies=replies;x.status="contactado";}
