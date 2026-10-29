@@ -1,0 +1,7 @@
+# Cloudflare Pages / Functions: React + Vite static files and serverless API.
+# This file is the declarative source of truth for Pages runtime settings.
+# Secrets such as DATABASE_URL are set separately in Cloudflare dashboard.
+name = "villabyte"
+pages_build_output_dir = "./dist"
+compatibility_date = "2026-10-29"
+compatibility_flags = ["nodejs_compat"]

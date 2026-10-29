@@ -1,0 +1,14 @@
+# Copiar como .dev.vars para desarrollo Pages local. NUNCA commitear valores reales.
+# Estas mismas variables se configuran en Cloudflare Pages > Settings > Variables and Secrets.
+
+DATABASE_URL=
+ADMIN_EMAIL=jonasvillavicencio845@gmail.com
+ADMIN_PASSWORD=
+SESSION_SECRET=
+
+GOOGLE_APPS_SCRIPT_URL=https://script.google.com/macros/s/AKfycbznNNt_-UqwNrL9XDnodbrfHi9KrHtCH8xRONz7N7seKT1jSPARnPR2mycLCT1Sk-RR/exec
+GOOGLE_APPS_SCRIPT_KEY=
+GOOGLE_APPS_SCRIPT_REPLY_KEY=
+GOOGLE_SCRIPT_REPLY_ENABLED=false
+
+# TURNSTILE_SECRET_KEY=    # No activar hasta integrar el widget en el formulario.

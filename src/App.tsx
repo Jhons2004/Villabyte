@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { serviceSeeds } from "./catalogSeeds";
+import { projectSeeds } from "./projectSeeds";
 import { ArrowRight, ArrowUpRight, Bot, Check, Code2, Database, ExternalLink, Github, Globe2, Laptop, LockKeyhole, Mail, MapPin, Menu, MessageCircle, MonitorCog, Network, Search, Send, ShieldCheck, Smartphone, Wrench, X } from "lucide-react";
 
 type Service={id:string;category:string;title:string;price:number|null;description:string;unit:string;active:boolean};
@@ -23,7 +25,7 @@ async function api(url:string,options?:RequestInit){
  return data;
 }
 export default function App(){
- const [config,setConfig]=useState<Config>(baseConfig),[services,setServices]=useState<Service[]>([]),[projects,setProjects]=useState<Project[]>([]);
+ const [config,setConfig]=useState<Config>(baseConfig),[services,setServices]=useState<Service[]>(serviceSeeds),[projects,setProjects]=useState<Project[]>(projectSeeds);
  const [section,setSection]=useState("Todos"),[search,setSearch]=useState(""),[serviceId,setServiceId]=useState("");
  const [adminView,setAdminView]=useState(window.location.hash==="#admin");
  const [authenticated,setAuthenticated]=useState(false),[email,setEmail]=useState(""),[password,setPassword]=useState("");
