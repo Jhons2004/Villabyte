@@ -6,6 +6,7 @@ Versión comercial de **VILLABYTE** (Guatemala): landing responsive negra/dorada
 
 - Catálogo de 35 servicios: computadoras, celulares, redes, páginas web, sistemas, bases de datos, IA y asesoría.
 - Búsqueda y filtros por categoría, precios desde / por hora / por mes y cotización para repuestos.
+- Portafolio con 16 proyectos comprobados por historial o repositorio, diferenciados por etapa.
 - Formulario público con servicio, nombre, email, teléfono, descripción y consentimiento.
 - Solicitudes persistentes en PostgreSQL y estado nuevo / contactado / en proceso / cerrado.
 - Aviso al correo del propietario por Resend API al recibir solicitudes.
@@ -22,7 +23,7 @@ Requisitos: Node.js 20+ y npm.
 
 1. Copiar el archivo .env.example a .env.
 2. Definir ADMIN_EMAIL, ADMIN_PASSWORD (contraseña fuerte) y SESSION_SECRET (cadena aleatoria de 32+ caracteres).
-3. Usar una base PostgreSQL **dedicada a Villabyte** en DATABASE_URL (Neon u otro servicio). Se crean las tablas villabyte_cms y villabyte_requests al iniciar.
+3. Usar la base PostgreSQL **dedicada a Villabyte** en Neon, proyecto falling-darkness-69465997, base villabyte. Sus tablas villabyte_cms y villabyte_requests están creadas y contienen 35 servicios y 16 proyectos. Obtener DATABASE_URL desde Neon y configurarlo de forma privada en el hosting, nunca en GitHub.
 4. Para correos, configurar RESEND_API_KEY, MAIL_FROM y NOTIFY_EMAIL; usar un remitente verificado con el proveedor.
 5. Ejecutar npm install, npm run lint, npm run dev. Abrir http://localhost:3000.
 6. Abrir http://localhost:3000/#admin para el panel.
@@ -51,3 +52,12 @@ Antes de poner en producción:
 No se publica DPI ni datos confidenciales de clientes. El formulario solicita solo información necesaria para responder. La bandeja requiere una sesión válida, y el envío usa credenciales privadas del servidor. Se eliminaron las credenciales administrativas hardcodeadas; hay que rotar cualquier contraseña usada en la versión anterior.
 
 Las pruebas de compilación e integración con Neon/Resend deben completarse antes de aprobar la publicación.
+
+## Estado del entorno (29 de octubre de 2026)
+
+- Neon Villabyte, base villabyte en AWS us-east-1, organización plan gratuito: creado.
+- Tablas villabyte_cms y villabyte_requests: creadas.
+- CMS inicial: 35 servicios, 16 proyectos, contacto comercial aún pendiente de confirmar.
+- GitHub: cambios en PR borrador, sin fusionar con main.
+- Correo transaccional y despliegue público: todavía sin configurar ni probar.
+- GitHub Actions reportó fallos sin pasos de ejecución registrados. Aún falta verificar compilación e integración en un entorno de pruebas antes de fusionar.
