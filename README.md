@@ -58,13 +58,13 @@ Las pruebas de compilación e integración con Neon y Google Apps Script deben c
 - Neon Villabyte, base villabyte en AWS us-east-1, organización plan gratuito: creado.
 - Tablas villabyte_cms y villabyte_requests: creadas.
 - CMS inicial: 35 servicios, 16 proyectos, contacto comercial confirmado: +502 4131 6765 y jonasvillavicencio845@gmail.com.
-- GitHub: cambios en PR borrador, sin fusionar con main.
+- GitHub: Villabyte 2.0 fusionado con main mediante PR #1 el 29 de octubre de 2026.
 - Apps Script existente validado por revisión del código, pero su disponibilidad externa no se pudo comprobar aquí; v2 listo en integración y pendiente de actualizar el despliegue y pruebas. Sitio aún sin publicación.
 - GitHub Actions reportó fallos sin pasos de ejecución registrados. Aún falta verificar compilación e integración en un entorno de pruebas antes de fusionar.
 
 ## Cuentas y despliegue separado
 
-La conexión Render disponible en ChatGPT está autorizada para jalvarado.oga@gmail.com (Jonathan's workspace); NO es una cuenta comercial exclusiva de Villabyte. Para utilizar otra cuenta, el propietario debe crearla/autorizarla y conectar esa identidad de Render a ChatGPT. No se debe desplegar en el workspace institucional sin instrucción explícita.
+La conexión Render disponible en ChatGPT está autorizada para jalvarado.oga@gmail.com (Jonathan's workspace); NO es una cuenta comercial exclusiva de Villabyte. Se debe abrir una cuenta de Render con el correo comercial o conectar la cuenta nueva en ChatGPT. El servicio Villabyte aún NO está creado en Render. No se debe usar el workspace institucional sin instrucción explícita.
 
 ### Google Apps Script: actualización segura
 
@@ -77,3 +77,14 @@ La conexión Render disponible en ChatGPT está autorizada para jalvarado.oga@gm
 7. No ejecutar funciones de prueba de correo sin intención expresa de mandar un correo.
 
 La implementación vieja acepta solo alertas al correo fijado en Script Properties. No puede realizar envío directo al cliente desde el CMS, por eso no se habilita esa operación antes de actualizarla. Se debe generar y rotar API_KEY porque el código antiguo contenía una clave de demostración visible.
+
+## Desplegar Villabyte en una cuenta Render independiente
+
+1. Abre https://render.com/deploy?repo=https://github.com/Jhons2004/Villabyte e inicia sesión con la NUEVA cuenta Render comercial, no con la cuenta de DSNC 360.
+2. Render detectará render.yaml y solicitará los secretos marcados sync:false: DATABASE_URL desde Neon (proyecto falling-darkness-69465997, base villabyte), ADMIN_PASSWORD (fuerte), GOOGLE_APPS_SCRIPT_KEY y GOOGLE_APPS_SCRIPT_REPLY_KEY. Los secretos no deben copiarse al repositorio.
+3. Antes del despliegue, verifica que la Web App de Google Apps Script v2 esté publicada y que su API_KEY y REPLY_API_KEY coincidan con las variables de Render. No uses la clave de ejemplo que aparecía en el código antiguo.
+4. El render.yaml despliega en región Virginia, plan gratuito, con build Node.js y actualizaciones automáticas al hacer push en main.
+5. Abre la URL gratuita asignada por Render; verifica /api/health, servicios, proyectos, envío de solicitud y correo de respuesta. Activa GOOGLE_SCRIPT_REPLY_ENABLED=true en Render una vez comprobada la versión 2.
+6. No confundas un sitio cargando correctamente con una integración completada: prueba que la solicitud llegue a la tabla y a Gmail.
+
+**Limitación del entorno:** el GitHub Actions de este repositorio informa fallos a nivel de inicialización del runner, sin pasos disponibles, por lo que no se confirma compilación por CI. Si Render falla en la compilación, usa el registro de despliegue para corregir el error. No se ha afirmado que el servicio esté publicado.
