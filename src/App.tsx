@@ -5,7 +5,7 @@ type Service={id:string;category:string;title:string;price:number|null;descripti
 type Config={company_name:string;hero_title:string;hero_subtitle:string;contact_email:string;location:string;phone:string;representative:string;representative_role:string;social_facebook?:string;social_instagram?:string};
 type Project={id:string;title:string;client:string;description:string;technologies:string[];status:string;stage?:string;live_url?:string;images?:string[]};
 type RequestItem={id:string;name:string;email:string;phone:string;service_id:string;service_title:string;description:string;status:string;created_at:string;email_sent:boolean;replies:{date:string;text:string;sent:boolean}[]};
-const baseConfig:Config={company_name:"VILLABYTE",hero_title:"Tecnología que resuelve. Ingeniería que transforma.",hero_subtitle:"Soporte técnico y software a medida para personas y empresas.",contact_email:"",phone:"",location:"Guatemala",representative:"Jonatan Abdiel Alvarado Villavicencio",representative_role:"Arquitecto de software"};
+const baseConfig:Config={company_name:"VILLABYTE",hero_title:"Tecnología que resuelve. Ingeniería que transforma.",hero_subtitle:"Soporte técnico y software a medida para personas y empresas.",contact_email:"jonasvillavicencio845@gmail.com",phone:"+502 4131 6765",location:"Guatemala",representative:"Jonatan Abdiel Alvarado Villavicencio",representative_role:"Arquitecto de software"};
 const categories=["Todos","Computadoras","Celulares","Redes y dispositivos","Web y comercio","Software empresarial","Asesoría"];
 const categoryIcon=(c:string)=>{
  if(c==="Computadoras")return <Laptop size={21}/>;
