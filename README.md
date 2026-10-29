@@ -9,7 +9,7 @@ Versión comercial de **VILLABYTE** (Guatemala): landing responsive negra/dorada
 - Portafolio con 16 proyectos comprobados por historial o repositorio, diferenciados por etapa.
 - Formulario público con servicio, nombre, email, teléfono, descripción y consentimiento.
 - Solicitudes persistentes en PostgreSQL y estado nuevo / contactado / en proceso / cerrado.
-- Aviso al correo del propietario por Resend API al recibir solicitudes.
+- Aviso al correo del propietario por la Web App existente de Google Apps Script y MailApp.
 - Bandeja privada con historial y botón para enviar respuesta al correo del cliente; alternativa manual de abrir el cliente de correo.
 - Panel para editar precios, activar/ocultar servicios, añadir proyectos y actualizar teléfono/correo.
 - Inicio de sesión mediante credenciales privadas de entorno y cookie HttpOnly (sin contraseña por defecto).
@@ -24,7 +24,7 @@ Requisitos: Node.js 20+ y npm.
 1. Copiar el archivo .env.example a .env.
 2. Definir ADMIN_EMAIL, ADMIN_PASSWORD (contraseña fuerte) y SESSION_SECRET (cadena aleatoria de 32+ caracteres).
 3. Usar la base PostgreSQL **dedicada a Villabyte** en Neon, proyecto falling-darkness-69465997, base villabyte. Sus tablas villabyte_cms y villabyte_requests están creadas y contienen 35 servicios y 16 proyectos. Obtener DATABASE_URL desde Neon y configurarlo de forma privada en el hosting, nunca en GitHub.
-4. Para correos, configurar RESEND_API_KEY, MAIL_FROM y NOTIFY_EMAIL; usar un remitente verificado con el proveedor.
+4. Para correos, actualizar la Web App existente con integrations/google-apps-script/villabyte-mail-v2.gs, definir Script Properties API_KEY, REPLY_API_KEY, DESTINATION_EMAIL=jonasvillavicencio845@gmail.com, SITE_NAME y SENDER_NAME. Configurar GOOGLE_APPS_SCRIPT_URL y GOOGLE_APPS_SCRIPT_KEY de forma privada en Render. Activar GOOGLE_SCRIPT_REPLY_ENABLED=true únicamente después de comprobar GET de la versión 2 y una prueba de respuesta.
 5. Ejecutar npm install, npm run lint, npm run dev. Abrir http://localhost:3000.
 6. Abrir http://localhost:3000/#admin para el panel.
 
@@ -35,7 +35,7 @@ Sin base de datos, el sitio usa un catálogo temporal en memoria durante desarro
 La aplicación integra Vite + Express. Requiere un host Node.js para atender las rutas de API. Se puede publicar completa en Render:
 - Build: npm install && npm run build
 - Start: npm run start
-- Variables privadas: NODE_ENV=production, DATABASE_URL, ADMIN_EMAIL, ADMIN_PASSWORD, SESSION_SECRET, RESEND_API_KEY, MAIL_FROM, NOTIFY_EMAIL.
+- Variables privadas: NODE_ENV=production, DATABASE_URL, ADMIN_EMAIL, ADMIN_PASSWORD, SESSION_SECRET, GOOGLE_APPS_SCRIPT_URL, GOOGLE_APPS_SCRIPT_KEY; para respuestas GOOGLE_SCRIPT_REPLY_ENABLED y GOOGLE_APPS_SCRIPT_REPLY_KEY.
 - Puerto: usar PORT asignado por el host.
 
 **No subir .env, claves ni conexiones reales.** No publicar TODO dist/ en un hosting de archivos estáticos porque también contiene el backend compilado. Cloudflare Pages necesita separar el frontend del backend y configurar un origen para las llamadas de API. No reutilizar bases de datos institucionales.
@@ -43,7 +43,7 @@ La aplicación integra Vite + Express. Requiere un host Node.js para atender las
 Antes de poner en producción:
 - Confirmar correo, teléfono comercial, alcance de atención y contenido de proyectos.
 - Aprobar el catálogo y las tarifas propuestas.
-- Verificar dominio/remitente con Resend y probar la notificación y respuesta reales.
+- Desplegar Apps Script v2, verificar que GET muestre capabilities.reply_to_customer, configurar DESTINATION_EMAIL correcto, probar notificación y respuesta real antes de activar respuestas.
 - Configurar respaldos, monitoreo básico y una política de privacidad accesible.
 - Probar panel, permisos, fallos de correo y experiencia móvil; revisar límites gratuitos.
 
@@ -51,13 +51,29 @@ Antes de poner en producción:
 
 No se publica DPI ni datos confidenciales de clientes. El formulario solicita solo información necesaria para responder. La bandeja requiere una sesión válida, y el envío usa credenciales privadas del servidor. Se eliminaron las credenciales administrativas hardcodeadas; hay que rotar cualquier contraseña usada en la versión anterior.
 
-Las pruebas de compilación e integración con Neon/Resend deben completarse antes de aprobar la publicación.
+Las pruebas de compilación e integración con Neon y Google Apps Script deben completarse antes de aprobar la publicación.
 
 ## Estado del entorno (29 de octubre de 2026)
 
 - Neon Villabyte, base villabyte en AWS us-east-1, organización plan gratuito: creado.
 - Tablas villabyte_cms y villabyte_requests: creadas.
-- CMS inicial: 35 servicios, 16 proyectos, contacto comercial aún pendiente de confirmar.
+- CMS inicial: 35 servicios, 16 proyectos, contacto comercial confirmado: +502 4131 6765 y jonasvillavicencio845@gmail.com.
 - GitHub: cambios en PR borrador, sin fusionar con main.
-- Correo transaccional y despliegue público: todavía sin configurar ni probar.
+- Apps Script existente validado por revisión del código, pero su disponibilidad externa no se pudo comprobar aquí; v2 listo en integración y pendiente de actualizar el despliegue y pruebas. Sitio aún sin publicación.
 - GitHub Actions reportó fallos sin pasos de ejecución registrados. Aún falta verificar compilación e integración en un entorno de pruebas antes de fusionar.
+
+## Cuentas y despliegue separado
+
+La conexión Render disponible en ChatGPT está autorizada para jalvarado.oga@gmail.com (Jonathan's workspace); NO es una cuenta comercial exclusiva de Villabyte. Para utilizar otra cuenta, el propietario debe crearla/autorizarla y conectar esa identidad de Render a ChatGPT. No se debe desplegar en el workspace institucional sin instrucción explícita.
+
+### Google Apps Script: actualización segura
+
+1. Guardar copia del script original en el editor de Apps Script.
+2. Pegar la versión completa del archivo integrations/google-apps-script/villabyte-mail-v2.gs en el proyecto correspondiente.
+3. Ir a Configuración del proyecto > Propiedades del script y actualizar DESTINATION_EMAIL y las dos claves independientes, sin compartirlas ni subirlas a GitHub.
+4. Implementar > Administrar implementaciones > Editar > Nueva versión. Mantener Web App ejecutada por propietario y acceso compatible con solicitudes HTTP del servidor. Conservar el ID y URL de implementación si corresponde.
+5. Abrir la URL pública sin el segmento /u/1; comprobar status=online y capabilities.reply_to_customer=true.
+6. En Render configurar la URL y las claves únicamente en Environment. Dejar GOOGLE_SCRIPT_REPLY_ENABLED=false hasta probar un correo real desde la bandeja usando la nueva versión.
+7. No ejecutar funciones de prueba de correo sin intención expresa de mandar un correo.
+
+La implementación vieja acepta solo alertas al correo fijado en Script Properties. No puede realizar envío directo al cliente desde el CMS, por eso no se habilita esa operación antes de actualizarla. Se debe generar y rotar API_KEY porque el código antiguo contenía una clave de demostración visible.
