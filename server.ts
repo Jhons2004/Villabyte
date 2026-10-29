@@ -23,7 +23,7 @@ const initial:any={
   contact_email:"",
   location:"Guatemala · Atención remota y presencial previa coordinación",
   phone:"",
-  representative:"Jonatan Alvarado",
+  representative:"Jonatan Abdiel Alvarado Villavicencio",
   representative_role:"Arquitecto de software",
   social_facebook:"",
   social_instagram:""
