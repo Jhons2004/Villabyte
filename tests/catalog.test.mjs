@@ -35,7 +35,7 @@ test("Cloudflare Pages Functions replaces legacy Node server and keeps secrets s
   assert.ok(worker.includes('"/api/admin/requests"'));
   assert.ok(worker.includes('"/api/requests"'));
   assert.ok(worker.includes("GOOGLE_APPS_SCRIPT_KEY"));
-  assert.ok(worker.includes("GOOGLE_APPS_SCRIPT_REPLY_ENABLED"));
+  assert.ok(worker.includes("GOOGLE_SCRIPT_REPLY_ENABLED"));
   assert.ok(config.includes('pages_build_output_dir = "./dist"'));
   assert.equal(pkg.scripts.build, "npm run test && vite build");
   assert.ok(!JSON.stringify(pkg.scripts).includes("server.ts"));
