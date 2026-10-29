@@ -3,6 +3,7 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { Pool } from "pg";
 import { createServer as createViteServer } from "vite";
+import { projectSeeds } from "./src/projectSeeds";
 
 const app = express();
 app.disable("x-powered-by");
@@ -22,7 +23,7 @@ const initial:any={
   contact_email:"",
   location:"Guatemala · Atención remota y presencial previa coordinación",
   phone:"",
-  representative:"Jonatan Abdiel Alvarado Villavicencio",
+  representative:"Jonatan Alvarado",
   representative_role:"Arquitecto de software",
   social_facebook:"",
   social_instagram:""
@@ -64,11 +65,7 @@ const initial:any={
   service("asesoria","Asesoría","Consultoría técnica personalizada",200,"Asesoría de arquitectura, tecnología y soporte.","hora"),
   service("capacitacion","Asesoría","Capacitación informática",150,"Acompañamiento para usuarios o negocios.","hora")
  ],
- projects:[
-  {id:"oga",title:"AcrediOGA",client:"Proyecto de ingeniería",description:"Gestión de acreditación, expedientes y trazabilidad.",technologies:["Next.js","FastAPI","PostgreSQL"],status:"Proyecto técnico",images:[],created_at:"2026-10-01"},
-  {id:"dsnc",title:"DSNC 360",client:"Proyecto institucional",description:"Plataforma de gestión y tableros administrativos.",technologies:["Next.js","PostgreSQL"],status:"Caso de desarrollo",images:[],created_at:"2026-10-01"},
-  {id:"erlang",title:"Calculadora Erlang",client:"Proyecto académico",description:"Matrices de tráfico y cálculos de telecomunicaciones.",technologies:["FastAPI","Next.js"],status:"Proyecto técnico",images:[],created_at:"2026-10-01"}
- ],
+ projects:projectSeeds,
  "trusted-clients":[]
 };
 const memory=JSON.parse(JSON.stringify(initial));
