@@ -9,7 +9,7 @@ services:
     region: oregon
     plan: free
     branch: main
-    autoDeployTrigger: off
+    autoDeployTrigger: 'off'
     buildCommand: npm install --no-audit --no-fund && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
