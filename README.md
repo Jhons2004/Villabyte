@@ -1,90 +1,84 @@
-# Villabyte — catálogo, cotizaciones y bandeja de solicitudes
+# Villabyte 2.0 — Cloudflare Pages + Pages Functions + Neon
 
-Versión comercial de **VILLABYTE** (Guatemala): landing responsive negra/dorada, catálogo de soporte y desarrollo, precios en quetzales, portafolio y CMS de solicitudes con respuesta por correo.
+Sitio comercial de Villabyte en Guatemala. Arquitectura adaptada de Express/Render a Cloudflare Pages + Pages Functions (runtime de Cloudflare Workers): frontend React 19/Vite, CMS, 35 servicios, 16 proyectos, solicitudes y respuestas por Google Apps Script.
 
-## Funciones incluidas
+## Arquitectura
 
-- Catálogo de 35 servicios: computadoras, celulares, redes, páginas web, sistemas, bases de datos, IA y asesoría.
-- Búsqueda y filtros por categoría, precios desde / por hora / por mes y cotización para repuestos.
-- Portafolio con 16 proyectos comprobados por historial o repositorio, diferenciados por etapa.
-- Formulario público con servicio, nombre, email, teléfono, descripción y consentimiento.
-- Solicitudes persistentes en PostgreSQL y estado nuevo / contactado / en proceso / cerrado.
-- Aviso al correo del propietario por la Web App existente de Google Apps Script y MailApp.
-- Bandeja privada con historial y botón para enviar respuesta al correo del cliente; alternativa manual de abrir el cliente de correo.
-- Panel para editar precios, activar/ocultar servicios, añadir proyectos y actualizar teléfono/correo.
-- Inicio de sesión mediante credenciales privadas de entorno y cookie HttpOnly (sin contraseña por defecto).
-- Sitio usable en móvil y escritorio, sin logotipos inventados ni métricas de SLA no acreditadas.
+- **Frontend**: React + Vite compilado como archivos estáticos en `dist/`.
+- **Backend**: `functions/api/[[path]].ts` implementa la API /api/* en Cloudflare Pages Functions. No se requiere servidor Node ni Render.
+- **PostgreSQL**: base exclusiva **Villabyte** en Neon, proyecto `falling-darkness-69465997`, DB `villabyte`. Se utiliza `@neondatabase/serverless` por HTTPS y `DATABASE_URL` en un secret privado.
+- **Correos**: Google Apps Script / MailApp en el proyecto del usuario; clave API solo en Pages Functions, nunca en frontend.
+- **Panel**: `/#admin` usa cookies HttpOnly/Secure/SameSite=Strict firmadas con HMAC Web Crypto. Operaciones de CMS y bandeja requieren sesión válida.
+- **Seguridad**: validación de origen, payload limitado, control de intentos administrativos mediante Neon, límite de solicitudes por correo en 15 minutos y honeypot; opcional validación Turnstile después de integrar su widget.
 
-**Aviso:** Los importes incluidos son tarifas PROPUESTAS para revisión, no precios oficiales confirmados. Las licencias y repuestos se cotizan aparte cuando corresponda. Las cuentas móviles solo se recuperan por medios oficiales para sus titulares. Los casos institucionales requieren revisión de publicación autorizada antes de mostrar detalles y logotipos.
+El formulario guarda primero en Neon y luego intenta notificar a Gmail. Si falla la notificación, la solicitud queda guardada y se muestra su identificador. La respuesta desde el panel solo se activa después de configurar Apps Script v2.
 
-## Desarrollo
+## Datos comerciales
 
-Requisitos: Node.js 20+ y npm.
+- Villabyte, Guatemala
+- Contacto: **+502 4131 6765**
+- Correo: **jonasvillavicencio845@gmail.com**
+- Representante: **Jonatan Abdiel Alvarado Villavicencio**, Arquitecto de software
+- 35 servicios con **tarifas de referencia**, no cotizaciones definitivas
+- 16 proyectos en distintas etapas, incluido **Colegio Mundo de Juguetes**
 
-1. Copiar el archivo .env.example a .env.
-2. Definir ADMIN_EMAIL, ADMIN_PASSWORD (contraseña fuerte) y SESSION_SECRET (cadena aleatoria de 32+ caracteres).
-3. Usar la base PostgreSQL **dedicada a Villabyte** en Neon, proyecto falling-darkness-69465997, base villabyte. Sus tablas villabyte_cms y villabyte_requests están creadas y contienen 35 servicios y 16 proyectos. Obtener DATABASE_URL desde Neon y configurarlo de forma privada en el hosting, nunca en GitHub.
-4. Para correos, actualizar la Web App existente con integrations/google-apps-script/villabyte-mail-v2.gs, definir Script Properties API_KEY, REPLY_API_KEY, DESTINATION_EMAIL=jonasvillavicencio845@gmail.com, SITE_NAME y SENDER_NAME. Configurar GOOGLE_APPS_SCRIPT_URL y GOOGLE_APPS_SCRIPT_KEY de forma privada en Render. Activar GOOGLE_SCRIPT_REPLY_ENABLED=true únicamente después de comprobar GET de la versión 2 y una prueba de respuesta.
-5. Ejecutar npm install, npm run lint, npm run dev. Abrir http://localhost:3000.
-6. Abrir http://localhost:3000/#admin para el panel.
+Los datos de catálogo y proyectos se encuentran en Neon. `src/catalogSeeds.ts` y `src/projectSeeds.ts` mantienen una versión **pública de respaldo** para visualizar la web aun cuando el backend todavía no se haya configurado. Las ediciones reales se almacenan en Neon.
 
-Sin base de datos, el sitio usa un catálogo temporal en memoria durante desarrollo. En producción el formulario rechaza solicitudes si no existe base de datos: **no finge que envió una solicitud**. La notificación por correo es secundaria: primero se guarda en PostgreSQL.
+## Publicación inicial desde Cloudflare (sin Render)
 
-## Publicación (después de las pruebas)
+1. Crear cuenta o iniciar sesión en https://dash.cloudflare.com/ .
+2. Abrir **Workers & Pages → Create application → Pages → Connect to Git** (la ubicación exacta del menú puede variar).
+3. Autorizar GitHub `Jhons2004` y seleccionar el repositorio `Jhons2004/Villabyte`, rama de producción **main**. No es necesario crear una copia del repositorio.
+4. Elegir configuración de Vite:
+   - **Root directory**: raíz del repositorio
+   - **Build command**: `npm install --no-audit --no-fund && npm run build`
+   - **Build output directory**: `dist`
+   - **Node.js**: 22
+   - **Pages project name**: `villabyte` (si no está disponible, usar otra denominación y actualizar el nombre de `wrangler.toml`)
+5. En el proyecto de Pages, abrir **Settings → Variables and Secrets** y agregar secretos **encrypted**; configurar tanto el entorno de producción como el de vista previa si se requiere.
+6. Crear los secretos siguientes:
+   - `DATABASE_URL` — obtener en el panel de Neon, seleccionando proyecto Villabyte, base villabyte, rama main. Nunca publicar la URI.
+   - `ADMIN_EMAIL` — `jonasvillavicencio845@gmail.com`
+   - `ADMIN_PASSWORD` — contraseña nueva y robusta, exclusiva del CMS.
+   - `SESSION_SECRET` — valor aleatorio con al menos 32 caracteres.
+   - `GOOGLE_APPS_SCRIPT_URL` — URL /exec de la Web App comercial en su versión pública, sin /u/1.
+   - `GOOGLE_APPS_SCRIPT_KEY` — debe coincidir con la propiedad `API_KEY` del script.
+   - `GOOGLE_APPS_SCRIPT_REPLY_KEY` — debe coincidir con `REPLY_API_KEY`, diferente de API_KEY.
+   - `GOOGLE_SCRIPT_REPLY_ENABLED` — inicialmente `false`, cambiar a `true` tras comprobar que Google Apps Script v2 contesta a destinatarios externos correctamente.
+7. Volver a desplegar para que Pages Functions reciba los secrets. Visitar `https://<nombre>.pages.dev/api/health`. Debe devolver `ok:true` y `database:true`.
+8. Visitar la página pública, examinar los 35 servicios y 16 proyectos, crear solicitud de prueba, confirmar registro en Neon y comprobar notificación al Gmail indicado.
+9. En `/#admin`, iniciar sesión con las credenciales configuradas y probar el envío de una respuesta a una cuenta controlada por ti. Solo entonces habilitar las respuestas automáticas.
+10. Habilitar o mantener las actualizaciones automáticas de Cloudflare Pages desde GitHub y configurar un dominio propio si lo tienes.
 
-La aplicación integra Vite + Express. Requiere un host Node.js para atender las rutas de API. Se puede publicar completa en Render:
-- Build: npm install && npm run build
-- Start: npm run start
-- Variables privadas: NODE_ENV=production, DATABASE_URL, ADMIN_EMAIL, ADMIN_PASSWORD, SESSION_SECRET, GOOGLE_APPS_SCRIPT_URL, GOOGLE_APPS_SCRIPT_KEY; para respuestas GOOGLE_SCRIPT_REPLY_ENABLED y GOOGLE_APPS_SCRIPT_REPLY_KEY.
-- Puerto: usar PORT asignado por el host.
+Las claves nunca deben pegarse en React, en un commit público, ni en este chat. Google Apps Script envía desde la cuenta propietaria del script, no desde un servidor SMTP convencional.
 
-**No subir .env, claves ni conexiones reales.** No publicar TODO dist/ en un hosting de archivos estáticos porque también contiene el backend compilado. Cloudflare Pages necesita separar el frontend del backend y configurar un origen para las llamadas de API. No reutilizar bases de datos institucionales.
+### Script de correo
 
-Antes de poner en producción:
-- Confirmar correo, teléfono comercial, alcance de atención y contenido de proyectos.
-- Aprobar el catálogo y las tarifas propuestas.
-- Desplegar Apps Script v2, verificar que GET muestre capabilities.reply_to_customer, configurar DESTINATION_EMAIL correcto, probar notificación y respuesta real antes de activar respuestas.
-- Configurar respaldos, monitoreo básico y una política de privacidad accesible.
-- Probar panel, permisos, fallos de correo y experiencia móvil; revisar límites gratuitos.
+Código para actualizar la implementación actual: `integrations/google-apps-script/villabyte-mail-v2.gs`.
 
-## Seguridad y datos personales
+En **Propiedades del script**:
+- `DESTINATION_EMAIL=jonasvillavicencio845@gmail.com`
+- `SITE_NAME=Villabyte`
+- `SENDER_NAME=Villabyte | Atención comercial`
+- `API_KEY` y `REPLY_API_KEY`: generar claves distintas y secretas.
 
-No se publica DPI ni datos confidenciales de clientes. El formulario solicita solo información necesaria para responder. La bandeja requiere una sesión válida, y el envío usa credenciales privadas del servidor. Se eliminaron las credenciales administrativas hardcodeadas; hay que rotar cualquier contraseña usada en la versión anterior.
+Actualizar mediante **Deploy → Manage deployments → Edit → New version**. La URL debe devolver `capabilities.reply_to_customer=true`. El backend no aceptará una respuesta como enviada a menos que el script confirme acción, destinatario e identificador.
 
-Las pruebas de compilación e integración con Neon y Google Apps Script deben completarse antes de aprobar la publicación.
+## Desarrollo local
 
-## Estado del entorno (29 de octubre de 2026)
+Node.js 22+.
 
-- Neon Villabyte, base villabyte en AWS us-east-1, organización plan gratuito: creado.
-- Tablas villabyte_cms y villabyte_requests: creadas.
-- CMS inicial: 35 servicios, 16 proyectos, contacto comercial confirmado: +502 4131 6765 y jonasvillavicencio845@gmail.com.
-- GitHub: Villabyte 2.0 fusionado con main mediante PR #1 el 29 de octubre de 2026.
-- Apps Script existente validado por revisión del código, pero su disponibilidad externa no se pudo comprobar aquí; v2 listo en integración y pendiente de actualizar el despliegue y pruebas. Sitio aún sin publicación.
-- GitHub Actions reportó fallos sin pasos de ejecución registrados. Aún falta verificar compilación e integración en un entorno de pruebas antes de fusionar.
+- `npm install`
+- Copiar `.dev.vars.example` a `.dev.vars` y completar valores locales (sin subir el archivo).
+- `npm run build`
+- `npm run dev:cloudflare` para ejecutar Pages Functions con Wrangler y el frontend compilado.
+- `npm run lint` para verificar TypeScript.
+- `npm run deploy:cloudflare` únicamente una vez autenticado en Cloudflare y creada la página correspondiente.
 
-## Cuentas y despliegue separado
+## Verificación y consideraciones
 
-La conexión Render disponible en ChatGPT está autorizada para jalvarado.oga@gmail.com (Jonathan's workspace); NO es una cuenta comercial exclusiva de Villabyte. Se debe abrir una cuenta de Render con el correo comercial o conectar la cuenta nueva en ChatGPT. El servicio Villabyte aún NO está creado en Render. No se debe usar el workspace institucional sin instrucción explícita.
+La base Neon exclusiva ya tiene tablas `villabyte_cms`, `villabyte_requests` y `villabyte_auth_attempts`. Contiene 35 servicios y 16 proyectos. La creación de la cuenta/proyecto Cloudflare y el ingreso de secretos requieren autorización desde tu cuenta; no se puede garantizar una URL pública hasta completar esos pasos.
 
-### Google Apps Script: actualización segura
+**Pruebas pendientes antes de declarar producción OK:** compilar el repositorio con Node y las dependencias instaladas, confirmar logs de Pages Functions, probar consultas Neon, validar escritura/lectura y recepción de correos. GitHub Actions de este repositorio ha mostrado fallas previas de inicio de runner sin ejecutar los pasos, por lo que no se consideran pruebas completas.
 
-1. Guardar copia del script original en el editor de Apps Script.
-2. Pegar la versión completa del archivo integrations/google-apps-script/villabyte-mail-v2.gs en el proyecto correspondiente.
-3. Ir a Configuración del proyecto > Propiedades del script y actualizar DESTINATION_EMAIL y las dos claves independientes, sin compartirlas ni subirlas a GitHub.
-4. Implementar > Administrar implementaciones > Editar > Nueva versión. Mantener Web App ejecutada por propietario y acceso compatible con solicitudes HTTP del servidor. Conservar el ID y URL de implementación si corresponde.
-5. Abrir la URL pública sin el segmento /u/1; comprobar status=online y capabilities.reply_to_customer=true.
-6. En Render configurar la URL y las claves únicamente en Environment. Dejar GOOGLE_SCRIPT_REPLY_ENABLED=false hasta probar un correo real desde la bandeja usando la nueva versión.
-7. No ejecutar funciones de prueba de correo sin intención expresa de mandar un correo.
-
-La implementación vieja acepta solo alertas al correo fijado en Script Properties. No puede realizar envío directo al cliente desde el CMS, por eso no se habilita esa operación antes de actualizarla. Se debe generar y rotar API_KEY porque el código antiguo contenía una clave de demostración visible.
-
-## Desplegar Villabyte en una cuenta Render independiente
-
-1. Abre https://render.com/deploy?repo=https://github.com/Jhons2004/Villabyte e inicia sesión con la NUEVA cuenta Render comercial, no con la cuenta de DSNC 360.
-2. Render detectará render.yaml y solicitará los secretos marcados sync:false: DATABASE_URL desde Neon (proyecto falling-darkness-69465997, base villabyte), ADMIN_PASSWORD (fuerte), GOOGLE_APPS_SCRIPT_KEY y GOOGLE_APPS_SCRIPT_REPLY_KEY. Los secretos no deben copiarse al repositorio.
-3. Antes del despliegue, verifica que la Web App de Google Apps Script v2 esté publicada y que su API_KEY y REPLY_API_KEY coincidan con las variables de Render. No uses la clave de ejemplo que aparecía en el código antiguo.
-4. El render.yaml despliega en región Virginia, plan gratuito, con build Node.js y actualizaciones automáticas al hacer push en main.
-5. Abre la URL gratuita asignada por Render; verifica /api/health, servicios, proyectos, envío de solicitud y correo de respuesta. Activa GOOGLE_SCRIPT_REPLY_ENABLED=true en Render una vez comprobada la versión 2.
-6. No confundas un sitio cargando correctamente con una integración completada: prueba que la solicitud llegue a la tabla y a Gmail.
-
-**Limitación del entorno:** el GitHub Actions de este repositorio informa fallos a nivel de inicialización del runner, sin pasos disponibles, por lo que no se confirma compilación por CI. Si Render falla en la compilación, usa el registro de despliegue para corregir el error. No se ha afirmado que el servicio esté publicado.
+Los servicios institucionales se presentan como trabajo técnico sin divulgar información confidencial ni afirmar una relación comercial oficial no autorizada. Precios referenciales; repuestos, licencias y desplazamientos se cotizan por separado.
