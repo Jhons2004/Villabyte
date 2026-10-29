@@ -1,7 +1,7 @@
 # Render Blueprint para una cuenta/workspace exclusivo de Villabyte.
 # No modifica los servicios DSNC-360.
 # Crear desde Render > New > Blueprint, vinculado a este repositorio.
-# Se deja sin autodespliegue hasta completar build y pruebas.
+# Al conectarse al Render comercial, despliega automáticamente cambios de main.
 services:
   - type: web
     name: villabyte
@@ -9,7 +9,7 @@ services:
     region: oregon
     plan: free
     branch: main
-    autoDeployTrigger: 'off'
+    autoDeployTrigger: commit
     buildCommand: npm install --no-audit --no-fund && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
