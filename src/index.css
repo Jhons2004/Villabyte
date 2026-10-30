@@ -36,3 +36,23 @@ button,input,textarea,select{font:inherit}button{cursor:pointer}button:disabled{
 .vb-mail-diagnostic-actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;align-items:center;flex-shrink:0}
 .vb-mail-diagnostic-actions .vb-button{padding:11px 15px;font-size:12px;white-space:nowrap}
 @media(max-width:720px){.vb-mail-diagnostic-actions{align-items:stretch;justify-content:flex-start}.vb-mail-diagnostic-actions button{width:100%}}
+
+/* Adjuntos privados en solicitudes comerciales */
+.vb-attachments-field{padding:18px;border:1px dashed #745733;border-radius:7px;background:rgba(223,176,102,.045);margin:12px 0 19px}
+.vb-attachments-field>label{display:block;color:#e5c58c;font-weight:600;font-size:14px;margin-bottom:6px}
+.vb-attachments-field>p{font-size:12px;color:#aea194;line-height:1.5;margin:0 0 12px}
+.vb-attachments-field input[type=file]{display:block;width:100%;max-width:100%;color:#d2c4ac;font-size:13px;border:1px solid #56412e;border-radius:5px;padding:12px;background:#0c0b09}
+.vb-attachments-field input[type=file]::file-selector-button{background:#cba163;color:#17120a;border:0;padding:8px 13px;border-radius:4px;cursor:pointer;margin-right:12px}
+.vb-photo-previews{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:16px}
+.vb-photo-preview{min-width:0;display:flex;flex-direction:column;gap:7px;background:#110f0c;border:1px solid #584431;padding:8px;border-radius:5px}
+.vb-photo-preview img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:4px}
+.vb-photo-preview span{overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:11px;color:#d1ba96}
+.vb-photo-preview button{border:1px solid #826141;border-radius:4px;background:transparent;color:#d7a96b;padding:7px}
+.vb-request-images{border-top:1px solid #51402c;padding-top:16px;margin-top:18px}
+.vb-request-images>strong{color:#e4c48f;font-size:14px}
+.vb-request-images-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,180px));gap:12px;margin-top:12px}
+.vb-request-images-grid a{border:1px solid #584431;background:#0d0b09;border-radius:6px;overflow:hidden;display:block;min-width:0}
+.vb-request-images-grid a img{width:100%;height:130px;object-fit:cover;display:block}
+.vb-request-images-grid a span{display:block;padding:8px;color:#dcc6a2;font-size:11px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.vb-request-images-grid a:focus-visible{outline:2px solid #edc781;outline-offset:3px}
+@media(max-width:560px){.vb-photo-previews{grid-template-columns:repeat(2,minmax(0,1fr))}.vb-request-images-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
