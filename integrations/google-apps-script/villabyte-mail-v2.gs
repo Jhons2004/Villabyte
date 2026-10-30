@@ -8,6 +8,7 @@
  *   API_KEY          = clave nueva SOLO para Backend Render
  *   REPLY_API_KEY    = segunda clave diferente SOLO para Backend Render
  *   DESTINATION_EMAIL = jonasvillavicencio845@gmail.com
+ *   SECONDARY_NOTIFICATION_EMAIL = (email de segunda administradora, opcional)
  *   SITE_NAME        = Villabyte
  *   SENDER_NAME      = Villabyte | Atención comercial
  *
@@ -43,7 +44,12 @@ function vbDigest_(txt) {
     .slice(0, 12).map(function (b) { return ("0" + ((b + 256) % 256).toString(16)).slice(-2); }).join("");
 }
 function vbSend_(options) {
-  if (MailApp.getRemainingDailyQuota() < 1) throw new Error("Cuota diaria de correo agotada.");
+  var recipients = [options.to, options.cc || "", options.bcc || ""]
+    .filter(function(x) { return !!x; })
+    .join(",").split(",")
+    .filter(function(x) { return !!String(x).trim(); }).length;
+  if (MailApp.getRemainingDailyQuota() < recipients)
+    throw new Error("Cuota diaria de correo insuficiente.");
   MailApp.sendEmail(options);
 }
 function doGet() {
@@ -95,7 +101,13 @@ function doPost(e) {
       "\nTeléfono: " + (phone || "No indicado") +
       "\nEmpresa: " + (company || "No indicada") +
       "\nOrigen: " + page + "\n\nMensaje:\n" + message;
-    vbSend_({ to: cfg.DESTINATION_EMAIL, name: senderName,
+    // Recipients are controlled ONLY by the script's private properties,
+    // never by client input. Each administrator receives the same notification.
+    var primary = vbClean_(cfg.DESTINATION_EMAIL, 160).toLowerCase();
+    var secondary = vbClean_(cfg.SECONDARY_NOTIFICATION_EMAIL, 160).toLowerCase();
+    if (secondary && !vbEmail_(secondary))
+      throw new Error("SECONDARY_NOTIFICATION_EMAIL no es un correo válido.");
+    var mailOptions = { to: primary, name: senderName,
       subject: "[" + siteName + "] " + (subject || "Nueva solicitud"),
       body: info,
       replyTo: email,
@@ -105,7 +117,9 @@ function doPost(e) {
         "<p><strong>Correo:</strong> " + vbEscape_(email) + "</p>" +
         "<p><strong>Teléfono:</strong> " + vbEscape_(phone) + "</p>" +
         "<p><strong>Asunto:</strong> " + vbEscape_(subject) + "</p>" +
-        "<p style='white-space:pre-wrap'>" + vbEscape_(message) + "</p></div>" });
+        "<p style='white-space:pre-wrap'>" + vbEscape_(message) + "</p></div>" };
+    if (secondary && secondary !== primary) mailOptions.cc = secondary;
+    vbSend_(mailOptions);
     return vbJson_({ ok: true, action: "new_request", timestamp: new Date().toISOString() });
   } catch (err) {
     console.error(err);
