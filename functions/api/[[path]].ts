@@ -476,7 +476,7 @@ async function route(request: Request, env: Env): Promise<Response> {
   // Never reveal provider diagnostics or customer data without an admin session.
   const operator=await getAdmin(request,env);
   if (!operator) return bad("Inicia sesión como administrador", 401);
-  if (operator.role==="reviewer" && (method!=="GET" || !(path==="/api/admin/requests" || path==="/api/admin/mail-status" || /^\\/api\\/admin\\/requests\\/[0-9a-f-]{36}\\/images\\/[0-9a-f-]{36}$/i.test(path))))
+  if (operator.role==="reviewer" && (method!=="GET" || !(path==="/api/admin/requests" || path==="/api/admin/mail-status" || new RegExp("^/api/admin/requests/[0-9a-f-]{36}/images/[0-9a-f-]{36}$","i").test(path))))
     return bad("Esta cuenta puede revisar las solicitudes, pero no modificarlas",403);
   if (path === "/api/admin/mail-status" && method === "GET") {
     const probe = await probeMailScript(env);
