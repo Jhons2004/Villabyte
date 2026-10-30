@@ -79,7 +79,7 @@ test("CMS mail workflow supports diagnostics, a protected retry and safe custome
   assert.ok(worker.includes('response.action !== "reply_to_customer"'));
   assert.ok(frontend.includes("retryNotification"));
   assert.ok(frontend.includes("Reenviar aviso"));
-  assert.ok(frontend.includes("Verificar correo"));
+  assert.ok(frontend.includes("Revisar estado") && frontend.includes("Enviar correo de prueba"));
   assert.ok(frontend.includes("mailBusy"));
   assert.ok(script.includes("capabilities: { notification: notification, reply_to_customer: reply }"));
   assert.ok(!frontend.includes("GOOGLE_APPS_SCRIPT_KEY="));
