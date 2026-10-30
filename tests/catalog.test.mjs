@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import vm from "node:vm";
 import { readFileSync } from "node:fs";
 
 const read = name => readFileSync(new URL("../" + name, import.meta.url), "utf8");
@@ -156,4 +157,43 @@ test("Meilyn is review-only, while owner can issue ticket codes and reply", () =
  assert.ok(worker.includes('operator.role !== "owner"'));
  assert.ok(frontend.includes('adminUser?.role==="reviewer"'));
  assert.ok(frontend.includes('adminUser?.role==="owner"'));
+});
+
+test("Google MailApp receives requests at owner inbox and CMS replies at customer inbox using existing API_KEY", () => {
+  const source=read("integrations/google-apps-script/villabyte-mail-v2.gs");
+  const worker=read("functions/api/[[path]].ts");
+  const sent=[];
+  const cfg={API_KEY:"private-existing-key",DESTINATION_EMAIL:"owner@example.com",SITE_NAME:"Villabyte",SENDER_NAME:"Villabyte"};
+  const cache=new Map();
+  const sandbox={
+    PropertiesService:{getScriptProperties(){return {getProperties(){return cfg;}};}},
+    CacheService:{getScriptCache(){return {get(k){return cache.get(k)||null;},put(k,v){cache.set(k,v);}};}},
+    Utilities:{DigestAlgorithm:{SHA_256:"SHA_256"},computeDigest(){return Array(32).fill(5);}},
+    MailApp:{getRemainingDailyQuota(){return 100;},sendEmail(options){sent.push(options);}},
+    ContentService:{MimeType:{JSON:"JSON"},createTextOutput(text){return {setMimeType(){return this;},getContent(){return text;}};}},
+    console:{error(){}}
+  };
+  vm.runInNewContext(source,sandbox);
+  const send=(data)=>JSON.parse(sandbox.doPost({postData:{contents:JSON.stringify(data)}}).getContent());
+  const inquiry=send({apiKey:cfg.API_KEY,action:"new_request",name:"Cliente",
+    email:"cliente@example.com",phone:"50212345678",subject:"Consulta",message:"Necesito soporte",website:""});
+  assert.equal(inquiry.ok,true);
+  assert.equal(sent.length,1);
+  assert.equal(sent[0].to,cfg.DESTINATION_EMAIL);
+  assert.equal(sent[0].replyTo,"cliente@example.com");
+  const requestId="a1b2c3d4-0000-4000-8000-123456789abc";
+  const reply=send({apiKey:cfg.API_KEY,replyKey:cfg.API_KEY,action:"reply_to_customer",
+    recipient:"cliente@example.com",requestId,message:"Podemos atenderte mañana.",website:""});
+  assert.equal(reply.ok,true);
+  assert.equal(reply.action,"reply_to_customer");
+  assert.equal(reply.recipient,"cliente@example.com");
+  assert.equal(reply.requestId,requestId);
+  assert.equal(sent.length,2);
+  assert.equal(sent[1].to,"cliente@example.com");
+  assert.equal(sent[1].replyTo,cfg.DESTINATION_EMAIL);
+  const invalid=send({apiKey:cfg.API_KEY,replyKey:"wrong",action:"reply_to_customer",
+    recipient:"attacker@example.com",requestId,message:"Texto de prueba inválido"});
+  assert.equal(invalid.ok,false);
+  assert.equal(sent.length,2);
+  assert.ok(worker.includes("env.GOOGLE_APPS_SCRIPT_REPLY_KEY || env.GOOGLE_APPS_SCRIPT_KEY"));
 });
