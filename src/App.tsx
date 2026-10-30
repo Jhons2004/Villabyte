@@ -97,7 +97,7 @@ export default function App(){
    if(photoInputRef.current)photoInputRef.current.value="";
   }catch(e:any){setNotice(e.message);}finally{setSaving(false);}
  };
- const login=async(e:React.FormEvent)=>{e.preventDefault();setLoginMessage("");try{const result=await api("/api/admin/login",{method:"POST",body:JSON.stringify({email,password})});setAuthenticated(true);setAdminUser(result.user||null);setPassword("");setNotice("");}catch(e:any){setLoginMessage(e.message);}};
+ const login=async(e:React.FormEvent)=>{e.preventDefault();setLoginMessage("");try{const result=await api("/api/admin/login",{method:"POST",body:JSON.stringify({email,password})});setAuthenticated(true);setAdminUser(result.user||null);setTab("inbox");setPassword("");setNotice("");}catch(e:any){setLoginMessage(e.message);}};
  const logout=async()=>{await api("/api/admin/logout",{method:"POST"}).catch(()=>{});setAuthenticated(false);setAdminUser(null);setAdminView(false);window.location.hash="";};
  const updateService=async(s:Service,changes:Partial<Service>)=>{try{const v=await api("/api/services/"+encodeURIComponent(s.id),{method:"PUT",body:JSON.stringify(changes)});setServices(a=>a.map(x=>x.id===s.id?v:x));setNotice("Servicio actualizado.");}catch(e:any){setNotice(e.message);}};
  const addService=async(e:React.FormEvent)=>{e.preventDefault();try{const item=await api("/api/services",{method:"POST",body:JSON.stringify({title:newService.title,category:newService.category,description:newService.description,price:newService.price===""?null:Number(newService.price),unit:"servicio",active:true})});setServices(a=>[...a,item]);setNewService({title:"",category:"Computadoras",price:"",description:""});setNotice("Servicio agregado.");}catch(e:any){setNotice(e.message);}};
