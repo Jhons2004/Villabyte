@@ -56,3 +56,41 @@ button,input,textarea,select{font:inherit}button{cursor:pointer}button:disabled{
 .vb-request-images-grid a span{display:block;padding:8px;color:#dcc6a2;font-size:11px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .vb-request-images-grid a:focus-visible{outline:2px solid #edc781;outline-offset:3px}
 @media(max-width:560px){.vb-photo-previews{grid-template-columns:repeat(2,minmax(0,1fr))}.vb-request-images-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Ticket portal: customer-accessible without creating a permanent user */
+.vb-ticket-wrap{min-height:100vh;background:radial-gradient(circle at 80% 0,#272015,#090807 60%);padding:56px 0 90px}
+.vb-ticket-back{border:0;background:transparent;color:#dec093;display:inline-flex;align-items:center;gap:10px;margin-bottom:34px}
+.vb-ticket-header{max-width:700px;margin-bottom:34px}
+.vb-ticket-header h1{font:normal clamp(48px,6vw,78px) Georgia,serif;color:#f0eadf;margin:12px 0}
+.vb-ticket-header h1 em{color:#d5aa6b}
+.vb-ticket-header p{font-size:17px;color:#bbae99;line-height:1.6}
+.vb-ticket-panel{border:1px solid #52402a;border-radius:14px;max-width:810px;padding:30px;background:linear-gradient(125deg,#181410,#10100e)}
+.vb-ticket-panel h2{font:normal 29px Georgia,serif;margin:15px 0;color:#f0e6d8}
+.vb-ticket-panel p{color:#b8a994;line-height:1.6}
+.vb-ticket-panel label,.vb-ticket-reply label{display:flex;flex-direction:column;gap:9px;color:#dfc8a6;margin:17px 0}
+.vb-ticket-panel input,.vb-ticket-panel textarea{width:100%;border:1px solid #544330;background:#0a0a09;color:#f5eee2;border-radius:5px;padding:14px;outline-color:#d9ad69}
+.vb-ticket-panel .vb-button{margin-top:15px}
+.vb-ticket-foot{font-size:12px;display:flex;align-items:start;gap:8px}
+.vb-ticket-top{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
+.vb-ticket-original{border-left:3px solid #d5a966;background:#0b0b09;padding:15px;margin:25px 0}
+.vb-ticket-original p{white-space:pre-wrap}
+.vb-ticket-thread{display:flex;flex-direction:column;gap:15px;margin:25px 0}
+.vb-ticket-message{border:1px solid #54422a;border-radius:10px;padding:17px;max-width:90%;background:#1d170e}
+.vb-ticket-message.client{align-self:flex-end;background:#171817;border-color:#485143}
+.vb-ticket-message-meta{display:flex;justify-content:space-between;align-items:center;gap:22px;color:#e6c187}
+.vb-ticket-message-meta small{font-size:11px;color:#aaa095}
+.vb-ticket-message p{white-space:pre-wrap;overflow-wrap:anywhere;margin-bottom:0}
+.vb-ticket-reply{border-top:1px solid #54422a;padding-top:17px}
+.vb-ticket-notice{display:flex;gap:12px;align-items:center;padding:15px;background:#2a2117;border:1px solid #8b673d;border-radius:7px;color:#eed5ad;max-width:810px;margin-top:16px}
+.vb-issued-ticket{border:1px solid #b58b53;background:#251c11;border-radius:9px;padding:20px;margin-top:16px}
+.vb-issued-ticket strong{color:#f7ddae;font-size:18px}
+.vb-issued-ticket p{color:#dbbf92;font-size:13px;line-height:1.6}
+.vb-issued-ticket code,.vb-ticket-admin-access code{display:block;font-size:14px;overflow-wrap:anywhere;background:#060606;color:#ffe3a9;padding:15px;border-radius:4px;margin:10px 0}
+.vb-issued-actions{display:flex;flex-wrap:wrap;gap:10px}
+.vb-issued-actions button{border:1px solid #af884b;color:#f0d6aa;padding:10px 14px;border-radius:4px;background:#1c170f}
+.vb-ticket-admin-thread{border-top:1px solid #5f482b;padding:14px 0;margin-top:12px}
+.vb-ticket-admin-thread strong{color:#e5c48e}
+.vb-ticket-admin-thread .vb-history{margin:12px 0}
+.vb-ticket-admin-thread .vb-history p{margin:7px 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.vb-ticket-admin-access{border:1px dashed #755934;border-radius:6px;padding:12px;margin:15px 0}
+@media(max-width:620px){.vb-ticket-panel{padding:18px}.vb-ticket-top{flex-direction:column}.vb-ticket-message{max-width:100%}.vb-ticket-message-meta{gap:8px;flex-direction:column;align-items:flex-start}}

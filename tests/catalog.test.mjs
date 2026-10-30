@@ -52,7 +52,7 @@ test("two independent administrator accounts and private dual email notification
   assert.ok(worker.includes("type AdminAccount"));
   assert.ok(worker.includes("getAdmin(request, env)"));
   assert.ok(worker.includes("sessionRevision"));
-  assert.ok(worker.includes('role: "owner" | "administrator"'));
+  assert.ok(worker.includes('role: "owner" | "reviewer"'));
   assert.ok(frontend.includes("setAdminUser"));
   assert.ok(frontend.includes("Si la olvidaste"));
   assert.ok(script.includes("SECONDARY_NOTIFICATION_EMAIL"));
@@ -74,9 +74,9 @@ test("CMS mail workflow supports diagnostics, a protected retry and safe custome
   assert.ok(worker.includes("notification_claimed_at"));
   assert.ok(worker.includes("notification_attempts"));
   assert.ok(worker.includes("last_notification_error"));
-  assert.ok(worker.includes("if (!await isAdmin(request, env))"));
-  assert.ok(worker.includes("if (!probe.reply)"));
-  assert.ok(worker.includes('response.action !== "reply_to_customer"'));
+  assert.ok(worker.includes('const operator=await getAdmin(request,env)'));
+  assert.ok(worker.includes('response.action==="reply_to_customer"'));
+  assert.ok(worker.includes('ticket_saved:true'));
   assert.ok(frontend.includes("retryNotification"));
   assert.ok(frontend.includes("Reenviar aviso"));
   assert.ok(frontend.includes("Revisar estado") && frontend.includes("Enviar correo de prueba"));
@@ -123,4 +123,37 @@ test("request images use private R2 storage and Neon metadata, not public URLs",
   assert.ok(frontend.includes('r.attachments.map('));
   assert.ok(stylesheet.includes(".vb-photo-previews"));
   assert.ok(stylesheet.includes(".vb-request-images-grid"));
+});
+
+test("customer ticket access is protected and persists conversations without user accounts", () => {
+ const worker=read("functions/api/[[path]].ts");
+ const frontend=read("src/App.tsx");
+ const portal=read("src/TicketPortal.tsx");
+ assert.ok(worker.includes("villabyte_request_access"));
+ assert.ok(worker.includes("villabyte_ticket_messages"));
+ assert.ok(worker.includes('path === "/api/tickets/login"'));
+ assert.ok(worker.includes('path === "/api/tickets/thread"'));
+ assert.ok(worker.includes('const session = await clientSession(request, env)'));
+ assert.ok(worker.includes('const accessCode=newTicketSecret()'));
+ assert.ok(worker.includes("access_code: accessCode"));
+ assert.ok(worker.includes("crypto.getRandomValues"));
+ assert.ok(worker.includes('TICKET_COOKIE = "villabyte_ticket"'));
+ assert.ok(worker.includes("tokenHash===current[0].token_hash"));
+ assert.ok(frontend.includes("TicketPortal"));
+ assert.ok(frontend.includes("issuedTicket"));
+ assert.ok(frontend.includes("issuedAccess"));
+ assert.ok(frontend.includes("r.client_messages.map"));
+ assert.ok(portal.includes("Acceder a mi solicitud"));
+ assert.ok(portal.includes("Enviar mensaje"));
+});
+test("Meilyn is review-only, while owner can issue ticket codes and reply", () => {
+ const worker=read("functions/api/[[path]].ts");
+ const frontend=read("src/App.tsx");
+ assert.ok(worker.includes("meilynpaz06@gmail.com"));
+ assert.ok(worker.includes('role: "reviewer"'));
+ assert.ok(worker.includes('operator.role==="reviewer"'));
+ assert.ok(worker.includes("Esta cuenta puede revisar las solicitudes, pero no modificarlas"));
+ assert.ok(worker.includes('operator.role !== "owner"'));
+ assert.ok(frontend.includes('adminUser?.role==="reviewer"'));
+ assert.ok(frontend.includes('adminUser?.role==="owner"'));
 });

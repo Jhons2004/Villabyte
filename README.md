@@ -196,6 +196,42 @@ La tabla `villabyte_request_attachments` se creó en el proyecto Neon Villabyte,
 **Retención y seguridad:** define una política de conservación/eliminación de fotografías y revisa el consumo de R2. El bucket Standard incluye cierta cuota gratuita mensual, pero **puede generar facturación al superar los límites**. No almacenes documentos personales, credenciales ni imágenes sensibles en los adjuntos. Las fotografías no se envían como adjuntos de correo; se consultan desde el CMS privado.
 
 
+
+## Conversaciones privadas de clientes y acceso de Meilyn (octubre 2026)
+
+### Cliente: ticket sin registro de cuenta
+
+- El formulario crea la solicitud y, con ella, un **código aleatorio de acceso** de 24 bytes, que se muestra una sola vez en la página al cliente. Se guarda únicamente su HMAC en Neon (`villabyte_request_access`), no el código plano.
+- El cliente entra por `https://villabyte.pages.dev/#ticket` introduciendo **correo + código privado**. No se crea ningún usuario ni contraseña permanente.
+- La cookie `villabyte_ticket` está firmada mediante Web Crypto, es `HttpOnly; Secure; SameSite=Strict`, dura 8 horas, y solo permite leer **su solicitud** y los mensajes del hilo.
+- El cliente puede escribir mensajes de seguimiento; estos se guardan en Neon (`villabyte_ticket_messages`) y se intenta notificar al propietario a través del endpoint actual de Apps Script. Si falla el correo, el mensaje permanece visible para la administración.
+- El titular puede generar o renovar el código de tickets anteriores desde **Administrador → Solicitudes → Generar acceso al ticket**. Se invalida el código anterior y las sesiones vinculadas a él. El titular deberá entregar el nuevo código **directamente al propietario verificado del correo asociado**.
+- El cliente debe conservar su código. Si lo pierde, debe contactar desde su correo de solicitud para que el administrador verifique su identidad y emita otro. **Nunca se permite entrar solo con un correo o un ticket corto**, porque eso permitiría ver solicitudes ajenas.
+
+### Respuestas del titular
+
+El botón **Responder al ticket** deja de estar bloqueado por una comprobación GET a Apps Script. Cada respuesta se guarda en el ticket y aparece al cliente al ingresar. Si Cloudflare tiene `GOOGLE_APPS_SCRIPT_KEY` y `GOOGLE_APPS_SCRIPT_REPLY_KEY` y `GOOGLE_SCRIPT_REPLY_ENABLED` no es explícitamente `false`, el backend intenta enviarla al correo del cliente usando el endpoint existente con acción `reply_to_customer`. **Solo se informa que el correo fue enviado cuando Google confirma acción, destinatario exacto e ID de solicitud.** Una Web App antigua que solo notifica al propietario no demuestra capacidad de enviar al cliente: en ese caso, la respuesta queda publicada en el ticket y la interfaz indica claramente que el correo no está confirmado. Para enviar automáticamente al cliente, el endpoint debe implementar una operación de respuesta; el sitio no puede inventarla.
+
+### Meilyn Paz: revisora
+
+El correo de la cuenta secundaria es **`meilynpaz06@gmail.com`**. Su rol es **reviewer**: puede iniciar sesión y consultar solicitudes, mensajes e imágenes privadas de clientes, pero no modificar estados, catálogo, proyectos, correos, claves o códigos de acceso. Esto se impone tanto en la interfaz como en la API.
+
+El acceso **no se activa con el correo únicamente**. En Cloudflare Production → **Variables and Secrets**, guardar como Secrets:
+- `SECONDARY_ADMIN_EMAIL=meilynpaz06@gmail.com` (opcional: también se usa como predeterminado).
+- `SECONDARY_ADMIN_PASSWORD` = contraseña fuerte nueva y privada, de al menos 12 caracteres. No se publica ni comparte en GitHub.
+- Mantener sin cambios `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `SESSION_SECRET` y `DATABASE_URL`.
+
+La URL de acceso de Meilyn es el mismo `https://villabyte.pages.dev/#admin`, pero con su propio correo y contraseña. Cambiar su contraseña invalida sus sesiones anteriores.
+
+### Migraciones ejecutadas en Neon
+
+- `villabyte_request_access` para hashes de códigos de entrada.
+- `villabyte_ticket_messages` para los mensajes de seguimiento, con límite de 20 mensajes por ticket en 24 horas.
+- `villabyte_ticket_codes` se creó como tabla auxiliar reservada para futuros códigos temporales; **no interviene** en el acceso actual por código privado. No ejecutar rutinas de correo OTP sin una integración de envío confirmada.
+
+**La prueba SQL de inserción se ejecutó mediante EXPLAIN sin insertar datos ficticios**. Las solicitudes anteriores se conservan; requieren emitir su primer código desde el CMS. El desarrollo se despliega por GitHub → Cloudflare Pages; comprueba el resultado real de Cloudflare y un intercambio bidireccional antes de declarar la función completamente operativa.
+
+
 ## Desarrollo local
 
 Node.js 22+.

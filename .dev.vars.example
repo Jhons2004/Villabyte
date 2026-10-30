@@ -4,9 +4,9 @@
 DATABASE_URL=
 ADMIN_EMAIL=jonasvillavicencio845@gmail.com
 ADMIN_PASSWORD=
-# Segunda administradora: usar su propio correo y una contraseña distinta >= 12 caracteres.
+# Meilyn Paz: revisora de solicitudes. Contraseña exclusiva >=12 caracteres (secreto privado en Cloudflare).
 # No se activa hasta establecer ambas variables Secret en Cloudflare.
-SECONDARY_ADMIN_EMAIL=
+SECONDARY_ADMIN_EMAIL=meilynpaz06@gmail.com
 SECONDARY_ADMIN_PASSWORD=
 SESSION_SECRET=
 

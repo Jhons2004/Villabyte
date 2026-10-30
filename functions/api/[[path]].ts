@@ -78,16 +78,16 @@ async function hmacKey(env: Env): Promise<CryptoKey> {
   if (!env.SESSION_SECRET || env.SESSION_SECRET.length < 32) throw Error("SESSION_SECRET inválido");
   return crypto.subtle.importKey("raw", new TextEncoder().encode(env.SESSION_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
 }
-type AdminAccount = { email: string; password: string; role: "owner" | "administrator" };
+type AdminAccount = { email: string; password: string; role: "owner" | "reviewer" };
 function adminAccounts(env: Env): AdminAccount[] {
   const owner = clean(env.ADMIN_EMAIL, 180).toLowerCase();
-  const secondary = clean(env.SECONDARY_ADMIN_EMAIL, 180).toLowerCase();
+  const secondary = clean(env.SECONDARY_ADMIN_EMAIL || "meilynpaz06@gmail.com", 180).toLowerCase();
   const accounts: AdminAccount[] = [];
   if (validMail(owner) && env.ADMIN_PASSWORD)
     accounts.push({ email: owner, password: env.ADMIN_PASSWORD, role: "owner" });
   // Never enable a second account with incomplete secrets or the owner's email.
   if (validMail(secondary) && secondary !== owner && (env.SECONDARY_ADMIN_PASSWORD || "").length >= 12)
-    accounts.push({ email: secondary, password: env.SECONDARY_ADMIN_PASSWORD!, role: "administrator" });
+    accounts.push({ email: secondary, password: env.SECONDARY_ADMIN_PASSWORD!, role: "reviewer" });
   return accounts;
 }
 async function sessionRevision(env: Env, account: AdminAccount): Promise<string> {
@@ -126,6 +126,54 @@ async function isAdmin(req: Request, env: Env) {
 async function sha256(value: string): Promise<string> {
   return b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))));
 }
+
+const TICKET_COOKIE = "villabyte_ticket";
+const TICKET_SESSION_MS = 8 * 60 * 60 * 1000;
+function newTicketSecret(): string {
+  const bytes = new Uint8Array(24); crypto.getRandomValues(bytes); return b64url(bytes);
+}
+async function tokenDigest(env: Env, token: string): Promise<string> {
+  const bytes = await crypto.subtle.sign("HMAC", await hmacKey(env),
+    new TextEncoder().encode("ticket-access:" + token));
+  return b64url(new Uint8Array(bytes));
+}
+async function ticketCookie(env: Env, ticketId: string, email: string, tokenHash: string) {
+  const body = b64url(new TextEncoder().encode(JSON.stringify({
+    ticketId, email, tokenHash, expiry: Date.now() + TICKET_SESSION_MS
+  })));
+  const signature = b64url(new Uint8Array(await crypto.subtle.sign("HMAC", await hmacKey(env), new TextEncoder().encode("ticket-session:" + body))));
+  return TICKET_COOKIE + "=" + body + "." + signature + "; Path=/; Max-Age=28800; HttpOnly; Secure; SameSite=Strict";
+}
+async function clientSession(req: Request, env: Env): Promise<{ ticketId: string; email: string } | null> {
+  try {
+    const cookie = (req.headers.get("cookie") || "").split(";").map(x => x.trim()).find(x => x.startsWith(TICKET_COOKIE+"="));
+    const [body, signature] = (cookie?.slice(TICKET_COOKIE.length + 1) || "").split(".");
+    if (!body || !signature || !env.SESSION_SECRET) return null;
+    const verified = await crypto.subtle.verify("HMAC", await hmacKey(env), fromB64url(signature),
+      new TextEncoder().encode("ticket-session:" + body));
+    if (!verified) return null;
+    const p = JSON.parse(new TextDecoder().decode(fromB64url(body)));
+    if (!uuid(p.ticketId) || !validMail(p.email) || Number(p.expiry) <= Date.now()) return null;
+    const current = await rows(getDb(env), "SELECT a.token_hash FROM villabyte_requests r JOIN villabyte_request_access a ON a.request_id=r.id WHERE r.id=$1 AND lower(r.email)=$2", [p.ticketId, p.email]);
+    return current.length && p.tokenHash===current[0].token_hash ? { ticketId: p.ticketId, email: p.email } : null;
+  } catch { return null; }
+}
+async function ticketHistory(db: DB, ticketId: string) {
+  const found = await rows(db, "SELECT id, name, email, service_title, description, status, created_at, replies FROM villabyte_requests WHERE id=$1", [ticketId]);
+  if (!found.length) return null;
+  const messages = await rows(db, "SELECT id, sender_email, sender_type, body, notification_sent, created_at FROM villabyte_ticket_messages WHERE request_id=$1 ORDER BY created_at ASC LIMIT 150", [ticketId]);
+  const legacy = Array.isArray(found[0].replies) ? found[0].replies.map((v: Row, i: number) => ({
+    id: "staff-" + i, sender_type: "staff", body: String(v.text || ""), created_at: v.date, notification_sent: v.sent === true
+  })) : [];
+  return { ticket: { id:found[0].id, name:found[0].name, email:found[0].email,
+    service_title:found[0].service_title, description:found[0].description,
+    status:found[0].status, created_at:found[0].created_at },
+    messages: [...legacy, ...messages].sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at))) };
+}
+async function ticketAuthKey(env: Env, request: Request) {
+  return sha256("ticket-ip:" + (request.headers.get("cf-connecting-ip") || "unknown") + ":" + env.SESSION_SECRET);
+}
+
 async function emailFromScript(env: Env, data: Row) {
   if (!env.GOOGLE_APPS_SCRIPT_KEY) return { ok: false, reason: "La API de correo no está configurada" };
   const response = await fetch(env.GOOGLE_APPS_SCRIPT_URL || DEFAULT_SCRIPT_URL, {
@@ -269,6 +317,56 @@ async function route(request: Request, env: Env): Promise<Response> {
     } catch { return json({ ok: false, database: false, mail_configured: !!env.GOOGLE_APPS_SCRIPT_KEY }, 503); }
   }
 
+
+  if (path === "/api/tickets/login" && method === "POST") {
+    const form = await payload(request);
+    const email = clean(form.email, 180).toLowerCase(), accessCode = clean(form.accessCode, 100);
+    const db = getDb(env);
+    const lockKey = await ticketAuthKey(env, request);
+    const attempts = await rows(db, "SELECT failures FROM villabyte_auth_attempts WHERE key=$1 AND expires_at>NOW()", [lockKey]);
+    if (Number(attempts[0]?.failures || 0) >= 8) return bad("Demasiados intentos. Vuelve a intentar en 15 minutos.", 429);
+    const tokenHash = accessCode.length >= 24 && accessCode.length <= 100
+      ? await tokenDigest(env, accessCode) : "";
+    const matches = validMail(email) && tokenHash ? await rows(db,
+      "SELECT r.id FROM villabyte_request_access a JOIN villabyte_requests r ON r.id=a.request_id WHERE lower(r.email)=$1 AND a.token_hash=$2", [email, tokenHash]) : [];
+    if (!matches.length) {
+      await rows(db, "INSERT INTO villabyte_auth_attempts(key,failures,expires_at) VALUES($1,1,NOW()+INTERVAL '15 minutes') ON CONFLICT(key) DO UPDATE SET failures=CASE WHEN villabyte_auth_attempts.expires_at<NOW() THEN 1 ELSE villabyte_auth_attempts.failures+1 END,expires_at=NOW()+INTERVAL '15 minutes'", [lockKey]);
+      return bad("Correo o código de acceso incorrecto", 401);
+    }
+    await rows(db, "DELETE FROM villabyte_auth_attempts WHERE key=$1", [lockKey]);
+    return json({ success:true, ticket_id:matches[0].id }, 200, { "Set-Cookie":await ticketCookie(env, matches[0].id, email, tokenHash) });
+  }
+  if (path === "/api/tickets/logout" && method === "POST")
+    return json({ success:true }, 200, { "Set-Cookie":TICKET_COOKIE+"=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0" });
+  if (path === "/api/tickets/session" && method === "GET") {
+    const session = await clientSession(request, env);
+    return json({ authenticated:!!session, email:session?.email || null });
+  }
+  if (path === "/api/tickets/thread" && ["GET","POST"].includes(method)) {
+    const session = await clientSession(request, env);
+    if (!session) return bad("Inicia sesión con el código de tu ticket",401);
+    const db = getDb(env);
+    if (method === "GET") return json(await ticketHistory(db,session.ticketId));
+    const body = await payload(request), message = clean(body.message,3000);
+    if (message.length < 2) return bad("Escribe tu mensaje");
+    const tally = await rows(db, "SELECT COUNT(*)::int AS n FROM villabyte_ticket_messages WHERE request_id=$1 AND created_at>NOW()-INTERVAL '24 hours'", [session.ticketId]);
+    if (Number(tally[0]?.n || 0) >= 20) return bad("Límite diario de mensajes alcanzado",429);
+    const msgId=crypto.randomUUID();
+    await rows(db, "INSERT INTO villabyte_ticket_messages(id,request_id,sender_email,sender_type,body) VALUES($1,$2,$3,'client',$4)",
+      [msgId,session.ticketId,session.email,message]);
+    let notified=false;
+    if (env.GOOGLE_APPS_SCRIPT_KEY) {
+      try {
+        const result=await emailFromScript(env,{action:"new_request",name:"Seguimiento de cliente",email:session.email,
+          phone:"",company:"Villabyte",subject:"Seguimiento de ticket "+session.ticketId.slice(0,8),
+          message:"Mensaje del cliente en su ticket:\\n"+message+"\\nTicket: "+session.ticketId,
+          page:new URL(request.url).origin+"/#admin",website:""});
+        notified=result.ok===true && result.filtered!==true;
+        if(notified)await rows(db,"UPDATE villabyte_ticket_messages SET notification_sent=TRUE WHERE id=$1",[msgId]);
+      } catch(err) {console.error("Ticket message persisted; notification failed",err);}
+    }
+    return json({success:true,id:msgId,notified},201);
+  }
   if (path === "/api/admin/session" && method === "GET") {
     const account = await getAdmin(request, env);
     return json({ authenticated: !!account, user: account ? { email: account.email, role: account.role } : null });
@@ -352,6 +450,8 @@ async function route(request: Request, env: Env): Promise<Response> {
         uploaded.push({ id: fileId, object_key: key, filename: image.filename, content_type: image.type, byte_size: image.buffer.byteLength });
       }
       // Atomic metadata and request insert. The original request JSON contract remains intact.
+      const accessCode=newTicketSecret();
+      const accessHash=await tokenDigest(env,accessCode);
       await rows(db, `WITH inserted AS (
         INSERT INTO villabyte_requests(id,name,email,phone,service_id,service_title,description,status,email_sent,replies)
         VALUES($1,$2,$3,$4,$5,$6,$7,'nuevo',FALSE,'[]'::jsonb) RETURNING id
@@ -361,25 +461,31 @@ async function route(request: Request, env: Env): Promise<Response> {
         FROM inserted CROSS JOIN jsonb_to_recordset($8::jsonb)
           AS a(id text, object_key text, filename text, content_type text, byte_size integer)
         RETURNING id
-      ) SELECT id FROM inserted`, [id, name, email, phone, serviceId, selected.title, description, JSON.stringify(uploaded)]);
+      ), access AS (
+        INSERT INTO villabyte_request_access(request_id,token_hash)
+        SELECT inserted.id, $9 FROM inserted RETURNING request_id
+      ) SELECT id FROM inserted`, [id, name, email, phone, serviceId, selected.title, description, JSON.stringify(uploaded), accessHash]);
     } catch (error) {
       await Promise.allSettled(uploaded.map(item => env.MEDIA!.delete(item.object_key)));
       throw error;
     }
     const notice = await sendOwnerNotice(db, env, { id, name, email, phone, service_title: selected.title, description }, url.origin + "/#solicitar");
-    return json({ ok: true, id, notified: notice.sent, image_count: uploaded.length }, 201);
+    return json({ ok: true, id, access_code: accessCode, notified: notice.sent, image_count: uploaded.length }, 201);
   }
 
   // Never reveal provider diagnostics or customer data without an admin session.
-  if (!await isAdmin(request, env)) return bad("Inicia sesión como administrador", 401);
+  const operator=await getAdmin(request,env);
+  if (!operator) return bad("Inicia sesión como administrador", 401);
+  if (operator.role==="reviewer" && (method!=="GET" || !(path==="/api/admin/requests" || path==="/api/admin/mail-status" || new RegExp("^/api/admin/requests/[0-9a-f-]{36}/images/[0-9a-f-]{36}$","i").test(path))))
+    return bad("Esta cuenta puede revisar las solicitudes, pero no modificarlas",403);
   if (path === "/api/admin/mail-status" && method === "GET") {
     const probe = await probeMailScript(env);
     const replyKey = !!env.GOOGLE_APPS_SCRIPT_REPLY_KEY;
-    const enabled = env.GOOGLE_SCRIPT_REPLY_ENABLED === "true";
+    const enabled = env.GOOGLE_SCRIPT_REPLY_ENABLED !== "false";
     return json({
       mail_configured: !!env.GOOGLE_APPS_SCRIPT_KEY,
       notifications_ready: probe.notification,
-      reply_configured: probe.reply && replyKey && enabled,
+      reply_configured: !!env.GOOGLE_APPS_SCRIPT_KEY && replyKey && env.GOOGLE_SCRIPT_REPLY_ENABLED !== "false",
       script_online: probe.online,
       script_version: probe.version,
       missing_reply_key: !replyKey,
@@ -458,6 +564,8 @@ async function route(request: Request, env: Env): Promise<Response> {
       COALESCE((SELECT jsonb_agg(jsonb_build_object(
         'id',a.id,'filename',a.filename,'content_type',a.content_type,'byte_size',a.byte_size
       ) ORDER BY a.created_at) FROM villabyte_request_attachments a WHERE a.request_id=r.id), '[]'::jsonb) AS attachments
+      , COALESCE((SELECT jsonb_agg(jsonb_build_object('id',m.id,'body',m.body,'sender_email',m.sender_email,'created_at',m.created_at,'notification_sent',m.notification_sent)
+         ORDER BY m.created_at) FROM villabyte_ticket_messages m WHERE m.request_id=r.id),'[]'::jsonb) AS client_messages
       FROM villabyte_requests r ORDER BY r.created_at DESC LIMIT 250`));
   }
   // Photos always require the same admin cookie as the inbox. No public R2 URLs exist.
@@ -478,7 +586,17 @@ async function route(request: Request, env: Env): Promise<Response> {
       "Cross-Origin-Resource-Policy": "same-origin"
     } });
   }
-  const match = path.match(/^\/api\/admin\/requests\/([0-9a-f-]{36})(?:\/(reply|notify))?$/i);
+  const match = path.match(/^\/api\/admin\/requests\/([0-9a-f-]{36})(?:\/(reply|notify|access))?$/i);
+  if (match && method === "POST" && match[2] === "access") {
+    if (operator.role !== "owner") return bad("Solo el titular puede emitir códigos de acceso", 403);
+    const found = await rows(db,"SELECT email FROM villabyte_requests WHERE id=$1",[match[1]]);
+    if(!found.length)return bad("Solicitud no encontrada",404);
+    const code=newTicketSecret();
+    const hash=await tokenDigest(env,code);
+    await rows(db,"INSERT INTO villabyte_request_access(request_id,token_hash) VALUES($1,$2) ON CONFLICT(request_id) DO UPDATE SET token_hash=EXCLUDED.token_hash,rotated_at=NOW()",[match[1],hash]);
+    return json({success:true,access_code:code,email:found[0].email,
+      notice:"Copia este código y entrégalo solamente al titular del correo. Se invalida cualquier código anterior."});
+  }
   if (match && method === "POST" && match[2] === "notify") {
     const found = await rows(db, "SELECT * FROM villabyte_requests WHERE id=$1", [match[1]]);
     if (!found.length) return bad("Solicitud no encontrada", 404);
@@ -496,29 +614,39 @@ async function route(request: Request, env: Env): Promise<Response> {
     return changed[0] ? json(changed[0]) : bad("Solicitud no encontrada", 404);
   }
   if (match && method === "POST" && match[2] === "reply") {
-    if (env.GOOGLE_SCRIPT_REPLY_ENABLED !== "true" || !env.GOOGLE_APPS_SCRIPT_REPLY_KEY || !env.GOOGLE_APPS_SCRIPT_KEY)
-      return bad("Faltan los secretos de correo o la activación de respuestas en Cloudflare", 503);
-    const probe = await probeMailScript(env);
-    if (!probe.reply) return bad("Apps Script v2 no está disponible. Actualiza la implementación antes de responder a clientes.", 503);
+    // The reply must always reach the customer's private ticket. Email is
+    // best-effort, and we never treat a notification-only response as delivery.
     const body = await payload(request);
     const message = clean(body.message, 4000);
     if (message.length < 10) return bad("Escribe una respuesta de al menos 10 caracteres");
     const found = await rows(db, "SELECT * FROM villabyte_requests WHERE id=$1", [match[1]]);
     if (!found.length) return bad("Solicitud no encontrada", 404);
     const requestItem = found[0];
-    try {
-      const response = await emailFromScript(env, {
-        action: "reply_to_customer", replyKey: env.GOOGLE_APPS_SCRIPT_REPLY_KEY,
-        recipient: requestItem.email, requestId: requestItem.id,
-        subject: "Respuesta de Villabyte", message, website: ""
-      });
-      // Older Apps Script versions could incorrectly send replies only to the site owner.
-      if (response.action !== "reply_to_customer" || response.recipient !== requestItem.email || response.requestId !== requestItem.id)
-        return bad("Apps Script no confirmó el envío al destinatario", 503);
-    } catch (err) { console.error("Correo de respuesta falló", err); return bad("No se pudo enviar la respuesta", 503); }
-    const replies = [...(Array.isArray(requestItem.replies) ? requestItem.replies : []), { date: new Date().toISOString(), text: message, sent: true }];
+    // Write the response to the ticket BEFORE attempting external email delivery.
+    // If Google is not configured, the customer still sees this reply on login.
+    const replyId=crypto.randomUUID();
+    const replies = [...(Array.isArray(requestItem.replies) ? requestItem.replies : []),
+      { id: replyId, date: new Date().toISOString(), text: message, sent: false, author: operator.email }];
     await rows(db, "UPDATE villabyte_requests SET replies=$1::jsonb,status='contactado' WHERE id=$2", [JSON.stringify(replies), match[1]]);
-    return json({ success: true });
+    let emailed=false;
+    if (env.GOOGLE_APPS_SCRIPT_KEY && env.GOOGLE_APPS_SCRIPT_REPLY_KEY && env.GOOGLE_SCRIPT_REPLY_ENABLED !== "false") {
+      try {
+        const response = await emailFromScript(env, {
+          action: "reply_to_customer", replyKey: env.GOOGLE_APPS_SCRIPT_REPLY_KEY,
+          recipient: requestItem.email, requestId: requestItem.id,
+          subject: "Villabyte - Respuesta a solicitud "+requestItem.id.slice(0,8),
+          message, website: ""
+        });
+        // Fail closed on old notification-only scripts. They can return ok:true
+        // while mailing the owner instead of the customer.
+        emailed=response.action==="reply_to_customer" &&
+          response.recipient===requestItem.email && response.requestId===requestItem.id;
+        if(emailed)await rows(db,"UPDATE villabyte_requests SET replies=(SELECT jsonb_agg(CASE WHEN x->>'id'=$2 THEN jsonb_set(x,'{sent}','true'::jsonb) ELSE x END ORDER BY ord) FROM jsonb_array_elements(replies) WITH ORDINALITY AS t(x,ord)) WHERE id=$1",[match[1],replyId]);
+      }catch(err){console.error("Ticket reply saved, email delivery unconfirmed",err);}
+    }
+    return json({ success:true, ticket_saved:true, emailed, notice:emailed?
+      "Respuesta guardada en el ticket y enviada al correo del cliente":
+      "Respuesta guardada en el ticket. El correo al cliente no fue confirmado; puede verla al acceder a su ticket." });
   }
   return bad("Ruta no encontrada", 404);
 }
