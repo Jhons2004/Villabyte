@@ -97,3 +97,30 @@ test("existing Apps Script is tested by a protected POST without modifying the r
   assert.ok(frontend.includes('api("/api/admin/mail-test",{method:"POST"})'));
   assert.ok(frontend.includes("mail_configured:status.mail_configured"));
 });
+
+test("request images use private R2 storage and Neon metadata, not public URLs", () => {
+  const worker = read("functions/api/[[path]].ts");
+  const frontend = read("src/App.tsx");
+  const stylesheet = read("src/index.css");
+  assert.ok(worker.includes('MAX_IMAGES = 3'));
+  assert.ok(worker.includes('MAX_IMAGE_BYTES = 3 * 1024 * 1024'));
+  assert.ok(worker.includes('"/api/attachments/config"'));
+  assert.ok(worker.includes('request.formData()'));
+  assert.ok(worker.includes('form.getAll("images")'));
+  assert.ok(worker.includes("sniffImage(new Uint8Array(buffer))"));
+  assert.ok(worker.includes('env.MEDIA!.put('));
+  assert.ok(worker.includes('jsonb_to_recordset($8::jsonb)'));
+  assert.ok(worker.includes('villabyte_request_attachments'));
+  assert.ok(worker.includes('Promise.allSettled(uploaded.map('));
+  assert.ok(worker.includes('if (!await isAdmin(request, env))'));
+  assert.ok(worker.includes('"/images/"') || worker.includes('/images\\/'));
+  assert.ok(worker.includes('"Cache-Control": "private, no-store"'));
+  assert.ok(frontend.includes('id="vb-photo-upload"'));
+  assert.ok(frontend.includes('type="file"'));
+  assert.ok(frontend.includes('new FormData()'));
+  assert.ok(frontend.includes('setPhotoPreviews'));
+  assert.ok(frontend.includes('URL.revokeObjectURL'));
+  assert.ok(frontend.includes('r.attachments.map('));
+  assert.ok(stylesheet.includes(".vb-photo-previews"));
+  assert.ok(stylesheet.includes(".vb-request-images-grid"));
+});
