@@ -137,9 +137,9 @@ async function tokenDigest(env: Env, token: string): Promise<string> {
     new TextEncoder().encode("ticket-access:" + token));
   return b64url(new Uint8Array(bytes));
 }
-async function ticketCookie(env: Env, ticketId: string, email: string) {
+async function ticketCookie(env: Env, ticketId: string, email: string, tokenHash: string) {
   const body = b64url(new TextEncoder().encode(JSON.stringify({
-    ticketId, email, expiry: Date.now() + TICKET_SESSION_MS
+    ticketId, email, tokenHash, expiry: Date.now() + TICKET_SESSION_MS
   })));
   const signature = b64url(new Uint8Array(await crypto.subtle.sign("HMAC", await hmacKey(env), new TextEncoder().encode("ticket-session:" + body))));
   return TICKET_COOKIE + "=" + body + "." + signature + "; Path=/; Max-Age=28800; HttpOnly; Secure; SameSite=Strict";
@@ -154,8 +154,8 @@ async function clientSession(req: Request, env: Env): Promise<{ ticketId: string
     if (!verified) return null;
     const p = JSON.parse(new TextDecoder().decode(fromB64url(body)));
     if (!uuid(p.ticketId) || !validMail(p.email) || Number(p.expiry) <= Date.now()) return null;
-    const current = await rows(getDb(env), "SELECT 1 AS ok FROM villabyte_requests WHERE id=$1 AND lower(email)=$2", [p.ticketId, p.email]);
-    return current.length ? { ticketId: p.ticketId, email: p.email } : null;
+    const current = await rows(getDb(env), "SELECT a.token_hash FROM villabyte_requests r JOIN villabyte_request_access a ON a.request_id=r.id WHERE r.id=$1 AND lower(r.email)=$2", [p.ticketId, p.email]);
+    return current.length && p.tokenHash===current[0].token_hash ? { ticketId: p.ticketId, email: p.email } : null;
   } catch { return null; }
 }
 async function ticketHistory(db: DB, ticketId: string) {
@@ -334,7 +334,7 @@ async function route(request: Request, env: Env): Promise<Response> {
       return bad("Correo o código de acceso incorrecto", 401);
     }
     await rows(db, "DELETE FROM villabyte_auth_attempts WHERE key=$1", [lockKey]);
-    return json({ success:true, ticket_id:matches[0].id }, 200, { "Set-Cookie":await ticketCookie(env, matches[0].id, email) });
+    return json({ success:true, ticket_id:matches[0].id }, 200, { "Set-Cookie":await ticketCookie(env, matches[0].id, email, tokenHash) });
   }
   if (path === "/api/tickets/logout" && method === "POST")
     return json({ success:true }, 200, { "Set-Cookie":TICKET_COOKIE+"=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0" });
@@ -586,7 +586,17 @@ async function route(request: Request, env: Env): Promise<Response> {
       "Cross-Origin-Resource-Policy": "same-origin"
     } });
   }
-  const match = path.match(/^\/api\/admin\/requests\/([0-9a-f-]{36})(?:\/(reply|notify))?$/i);
+  const match = path.match(/^\/api\/admin\/requests\/([0-9a-f-]{36})(?:\/(reply|notify|access))?$/i);
+  if (match && method === "POST" && match[2] === "access") {
+    if (operator.role !== "owner") return bad("Solo el titular puede emitir códigos de acceso", 403);
+    const found = await rows(db,"SELECT email FROM villabyte_requests WHERE id=$1",[match[1]]);
+    if(!found.length)return bad("Solicitud no encontrada",404);
+    const code=newTicketSecret();
+    const hash=await tokenDigest(env,code);
+    await rows(db,"INSERT INTO villabyte_request_access(request_id,token_hash) VALUES($1,$2) ON CONFLICT(request_id) DO UPDATE SET token_hash=EXCLUDED.token_hash,rotated_at=NOW()",[match[1],hash]);
+    return json({success:true,access_code:code,email:found[0].email,
+      notice:"Copia este código y entrégalo solamente al titular del correo. Se invalida cualquier código anterior."});
+  }
   if (match && method === "POST" && match[2] === "notify") {
     const found = await rows(db, "SELECT * FROM villabyte_requests WHERE id=$1", [match[1]]);
     if (!found.length) return bad("Solicitud no encontrada", 404);
