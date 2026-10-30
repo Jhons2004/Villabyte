@@ -123,6 +123,51 @@ async function emailFromScript(env: Env, data: Row) {
   if (result.ok !== true) throw Error("Apps Script rechazó el correo: " + clean(result.error, 160));
   return result;
 }
+type MailProbe = { online: boolean; notification: boolean; reply: boolean; version: string; reason: string };
+async function probeMailScript(env: Env): Promise<MailProbe> {
+  if (!env.GOOGLE_APPS_SCRIPT_KEY) return { online: false, notification: false, reply: false, version: "", reason: "Falta GOOGLE_APPS_SCRIPT_KEY en Cloudflare" };
+  try {
+    const response = await fetch(env.GOOGLE_APPS_SCRIPT_URL || DEFAULT_SCRIPT_URL, {
+      method: "GET", redirect: "follow", signal: AbortSignal.timeout(8500)
+    });
+    if (!response.ok) return { online: false, notification: false, reply: false, version: "", reason: "Apps Script no responde HTTP 200 ("+response.status+")" };
+    const data = await response.json() as Row;
+    const online = data.ok === true && data.status === "online";
+    const reply = online && data.capabilities?.reply_to_customer === true;
+    return {
+      online, notification: online, reply,
+      version: clean(data.service, 80),
+      reason: !online ? "No se confirmó la Web App de Google" : !reply ? "La Web App está en versión antigua: publica villabyte-mail-v2.gs para responder clientes" : ""
+    };
+  } catch (err) {
+    console.error("Fallo de diagnóstico Apps Script", err);
+    return { online: false, notification: false, reply: false, version: "", reason: "No se pudo verificar Apps Script; revisa su URL y los permisos del despliegue" };
+  }
+}
+type NoticeResult = { sent: boolean; reason: string };
+async function sendOwnerNotice(db: DB, env: Env, item: Row, page: string): Promise<NoticeResult> {
+  if (!env.GOOGLE_APPS_SCRIPT_KEY) return { sent: false, reason: "Falta GOOGLE_APPS_SCRIPT_KEY en Cloudflare" };
+  const claimed = await rows(db, "UPDATE villabyte_requests SET notification_claimed_at=NOW(),notification_attempts=notification_attempts+1,last_notification_error=NULL WHERE id=$1 AND email_sent=FALSE AND (notification_claimed_at IS NULL OR notification_claimed_at < NOW()-INTERVAL '2 minutes') RETURNING id", [item.id]);
+  if (!claimed.length) return { sent: false, reason: "Notificación ya enviada o en proceso" };
+  try {
+    const response = await emailFromScript(env, {
+      action: "new_request", requestId: item.id,
+      name: item.name, email: item.email, phone: item.phone || "",
+      company: "", subject: "Solicitud " + String(item.id).slice(0, 8) + " - " + item.service_title,
+      message: String(item.description) + "\n\nCódigo: " + item.id + "\nServicio: " + item.service_title,
+      page, website: ""
+    });
+    if (response.ok !== true || response.filtered === true)
+      throw Error("Apps Script no confirmó el envío de la notificación");
+    await rows(db, "UPDATE villabyte_requests SET email_sent=TRUE,notification_claimed_at=NULL,last_notification_error=NULL WHERE id=$1", [item.id]);
+    return { sent: true, reason: "" };
+  } catch (err) {
+    const reason = err instanceof Error ? err.message.slice(0, 260) : "Error de proveedor";
+    console.error("Villabyte: notificación no confirmada para", item.id, reason);
+    await rows(db, "UPDATE villabyte_requests SET notification_claimed_at=NULL,last_notification_error=$2 WHERE id=$1", [item.id, reason]);
+    return { sent: false, reason: "El proveedor no confirmó el correo. Revisa Apps Script y vuelve a intentarlo desde la bandeja." };
+  }
+}
 async function checkTurnstile(env: Env, request: Request, token: string) {
   if (!env.TURNSTILE_SECRET_KEY) return true;
   if (!token) return false;
@@ -252,22 +297,27 @@ async function route(request: Request, env: Env): Promise<Response> {
     const id = crypto.randomUUID();
     await rows(db, "INSERT INTO villabyte_requests(id,name,email,phone,service_id,service_title,description,status,email_sent,replies) VALUES($1,$2,$3,$4,$5,$6,$7,'nuevo',FALSE,'[]'::jsonb)",
       [id, name, email, phone, serviceId, selected.title, description]);
-    let notified = false;
-    if (env.GOOGLE_APPS_SCRIPT_KEY) {
-      try {
-        const response = await emailFromScript(env, { action: "new_request", name, email, phone, website: "",
-          company: "", subject: "Solicitud " + id.slice(0, 8) + " - " + selected.title,
-          message: description + "\n\nCódigo: " + id + "\nServicio: " + selected.title,
-          page: url.origin + "/solicitar" });
-        notified = response.ok === true;
-        if (notified) await rows(db, "UPDATE villabyte_requests SET email_sent=TRUE WHERE id=$1", [id]);
-      } catch (err) { console.error("Correo de aviso pendiente", err); }
-    }
-    return json({ ok: true, id, notified }, 201);
+    const notice = await sendOwnerNotice(db, env, { id, name, email, phone, service_title: selected.title, description }, url.origin + "/#solicitar");
+    return json({ ok: true, id, notified: notice.sent }, 201);
   }
 
-  // Every administrator mutation and inbox operation requires a signed HttpOnly session.
+  // Never reveal provider diagnostics or customer data without an admin session.
   if (!await isAdmin(request, env)) return bad("Inicia sesión como administrador", 401);
+  if (path === "/api/admin/mail-status" && method === "GET") {
+    const probe = await probeMailScript(env);
+    const replyKey = !!env.GOOGLE_APPS_SCRIPT_REPLY_KEY;
+    const enabled = env.GOOGLE_SCRIPT_REPLY_ENABLED === "true";
+    return json({
+      mail_configured: !!env.GOOGLE_APPS_SCRIPT_KEY,
+      notifications_ready: probe.notification,
+      reply_configured: probe.reply && replyKey && enabled,
+      script_online: probe.online,
+      script_version: probe.version,
+      missing_reply_key: !replyKey,
+      reply_enabled: enabled,
+      reason: probe.reason || (!replyKey ? "Falta GOOGLE_APPS_SCRIPT_REPLY_KEY" : !enabled ? "Configura GOOGLE_SCRIPT_REPLY_ENABLED=true en Cloudflare para activar respuestas" : "")
+    });
+  }
   const db = getDb(env);
   if (path === "/api/config" && method === "PUT") {
     const body = await payload(request);
@@ -309,7 +359,16 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (path === "/api/admin/requests" && method === "GET") {
     return json(await rows(db, "SELECT * FROM villabyte_requests ORDER BY created_at DESC LIMIT 250"));
   }
-  const match = path.match(/^\/api\/admin\/requests\/([0-9a-f-]{36})(?:\/(reply))?$/i);
+  const match = path.match(/^\/api\/admin\/requests\/([0-9a-f-]{36})(?:\/(reply|notify))?$/i);
+  if (match && method === "POST" && match[2] === "notify") {
+    const found = await rows(db, "SELECT * FROM villabyte_requests WHERE id=$1", [match[1]]);
+    if (!found.length) return bad("Solicitud no encontrada", 404);
+    if (found[0].email_sent === true) return json({ success: true, notified: true, already_sent: true });
+    const result = await sendOwnerNotice(db, env, found[0], url.origin + "/#admin");
+    if (!result.sent) return bad(result.reason, 503);
+    const row = (await rows(db, "SELECT * FROM villabyte_requests WHERE id=$1", [match[1]]))[0];
+    return json({ success: true, notified: true, request: row });
+  }
   if (match && method === "PATCH" && !match[2]) {
     const body = await payload(request);
     const status = clean(body.status, 40);
@@ -318,7 +377,10 @@ async function route(request: Request, env: Env): Promise<Response> {
     return changed[0] ? json(changed[0]) : bad("Solicitud no encontrada", 404);
   }
   if (match && method === "POST" && match[2] === "reply") {
-    if (env.GOOGLE_SCRIPT_REPLY_ENABLED !== "true" || !env.GOOGLE_APPS_SCRIPT_REPLY_KEY) return bad("Activa Apps Script v2 para enviar respuestas", 503);
+    if (env.GOOGLE_SCRIPT_REPLY_ENABLED !== "true" || !env.GOOGLE_APPS_SCRIPT_REPLY_KEY || !env.GOOGLE_APPS_SCRIPT_KEY)
+      return bad("Faltan los secretos de correo o la activación de respuestas en Cloudflare", 503);
+    const probe = await probeMailScript(env);
+    if (!probe.reply) return bad("Apps Script v2 no está disponible. Actualiza la implementación antes de responder a clientes.", 503);
     const body = await payload(request);
     const message = clean(body.message, 4000);
     if (message.length < 10) return bad("Escribe una respuesta de al menos 10 caracteres");
