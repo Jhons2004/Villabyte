@@ -11,6 +11,9 @@ interface Env {
   DATABASE_URL: string;
   ADMIN_EMAIL: string;
   ADMIN_PASSWORD: string;
+  /** Optional independent administrator. Empty credentials never grant access. */
+  SECONDARY_ADMIN_EMAIL?: string;
+  SECONDARY_ADMIN_PASSWORD?: string;
   SESSION_SECRET: string;
   GOOGLE_APPS_SCRIPT_URL?: string;
   GOOGLE_APPS_SCRIPT_KEY?: string;
@@ -58,23 +61,50 @@ async function hmacKey(env: Env): Promise<CryptoKey> {
   if (!env.SESSION_SECRET || env.SESSION_SECRET.length < 32) throw Error("SESSION_SECRET inválido");
   return crypto.subtle.importKey("raw", new TextEncoder().encode(env.SESSION_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
 }
-async function makeCookie(env: Env, email: string) {
-  const body = b64url(new TextEncoder().encode(JSON.stringify({ email, expiry: Date.now() + SESSION_MS })));
+type AdminAccount = { email: string; password: string; role: "owner" | "administrator" };
+function adminAccounts(env: Env): AdminAccount[] {
+  const owner = clean(env.ADMIN_EMAIL, 180).toLowerCase();
+  const secondary = clean(env.SECONDARY_ADMIN_EMAIL, 180).toLowerCase();
+  const accounts: AdminAccount[] = [];
+  if (validMail(owner) && env.ADMIN_PASSWORD)
+    accounts.push({ email: owner, password: env.ADMIN_PASSWORD, role: "owner" });
+  // Never enable a second account with incomplete secrets or the owner's email.
+  if (validMail(secondary) && secondary !== owner && (env.SECONDARY_ADMIN_PASSWORD || "").length >= 12)
+    accounts.push({ email: secondary, password: env.SECONDARY_ADMIN_PASSWORD!, role: "administrator" });
+  return accounts;
+}
+async function sessionRevision(env: Env, account: AdminAccount): Promise<string> {
+  // Domain-separated keyed fingerprint: password changes invalidate prior sessions.
+  const rev = await crypto.subtle.sign("HMAC", await hmacKey(env),
+    new TextEncoder().encode("credential-revision:" + account.email + ":" + account.password));
+  return b64url(new Uint8Array(rev));
+}
+async function makeCookie(env: Env, account: AdminAccount) {
+  const revision = await sessionRevision(env, account);
+  const body = b64url(new TextEncoder().encode(JSON.stringify({
+    email: account.email, role: account.role, revision, expiry: Date.now() + SESSION_MS
+  })));
   const sig = b64url(new Uint8Array(await crypto.subtle.sign("HMAC", await hmacKey(env), new TextEncoder().encode(body))));
   return COOKIE + "=" + body + "." + sig + "; Path=/; Max-Age=43200; HttpOnly; Secure; SameSite=Strict";
 }
-async function isAdmin(req: Request, env: Env) {
+async function getAdmin(req: Request, env: Env): Promise<AdminAccount | null> {
   try {
-    if (!env.ADMIN_EMAIL || !env.ADMIN_PASSWORD || !env.SESSION_SECRET) return false;
+    if (!env.SESSION_SECRET || env.SESSION_SECRET.length < 32) return null;
     const cookie = (req.headers.get("cookie") || "").split(";").map(x => x.trim()).find(x => x.startsWith(COOKIE + "="));
     const token = cookie?.slice(COOKIE.length + 1) || "";
     const [body, signature, extra] = token.split(".");
-    if (!body || !signature || extra) return false;
+    if (!body || !signature || extra) return null;
     const verified = await crypto.subtle.verify("HMAC", await hmacKey(env), fromB64url(signature), new TextEncoder().encode(body));
-    if (!verified) return false;
+    if (!verified) return null;
     const p = JSON.parse(new TextDecoder().decode(fromB64url(body)));
-    return p.email === env.ADMIN_EMAIL.toLowerCase() && Number(p.expiry) > Date.now();
-  } catch { return false; }
+    if (Number(p.expiry) <= Date.now()) return null;
+    const account = adminAccounts(env).find(x => x.email === p.email && x.role === p.role);
+    if (!account || p.revision !== await sessionRevision(env, account)) return null;
+    return account;
+  } catch { return null; }
+}
+async function isAdmin(req: Request, env: Env) {
+  return (await getAdmin(req, env)) !== null;
 }
 async function sha256(value: string): Promise<string> {
   return b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value))));
@@ -171,7 +201,10 @@ async function route(request: Request, env: Env): Promise<Response> {
     } catch { return json({ ok: false, database: false, mail_configured: !!env.GOOGLE_APPS_SCRIPT_KEY }, 503); }
   }
 
-  if (path === "/api/admin/session" && method === "GET") return json({ authenticated: await isAdmin(request, env) });
+  if (path === "/api/admin/session" && method === "GET") {
+    const account = await getAdmin(request, env);
+    return json({ authenticated: !!account, user: account ? { email: account.email, role: account.role } : null });
+  }
   if (path === "/api/admin/login" && method === "POST") {
     if (!env.ADMIN_EMAIL || !env.ADMIN_PASSWORD || !env.SESSION_SECRET || env.SESSION_SECRET.length < 32) return bad("Administrador sin configurar", 503);
     const data = await payload(request);
@@ -181,16 +214,17 @@ async function route(request: Request, env: Env): Promise<Response> {
     const key = await sha256((request.headers.get("cf-connecting-ip") || "unknown") + ":" + env.SESSION_SECRET);
     const attempts = await rows(db, "SELECT failures FROM villabyte_auth_attempts WHERE key=$1 AND expires_at>NOW()", [key]);
     if (Number(attempts[0]?.failures || 0) >= 8) return bad("Demasiados intentos; espera 15 minutos", 429);
-    const expected = await sha256(env.ADMIN_PASSWORD), supplied = await sha256(pass);
+    const account = adminAccounts(env).find(x => x.email === email);
+    const expected = await sha256(account?.password || env.ADMIN_PASSWORD), supplied = await sha256(pass);
     // Compare fixed-length digests without an early exit.
     let difference = 0;
     for (let i = 0; i < expected.length; i++) difference |= expected.charCodeAt(i) ^ supplied.charCodeAt(i);
-    if (email !== env.ADMIN_EMAIL.toLowerCase() || difference !== 0) {
+    if (!account || difference !== 0) {
       await rows(db, "INSERT INTO villabyte_auth_attempts(key,failures,expires_at) VALUES($1,1,NOW()+INTERVAL '15 minutes') ON CONFLICT(key) DO UPDATE SET failures=CASE WHEN villabyte_auth_attempts.expires_at<NOW() THEN 1 ELSE villabyte_auth_attempts.failures+1 END,expires_at=NOW()+INTERVAL '15 minutes'", [key]);
       return bad("Credenciales inválidas", 401);
     }
     await rows(db, "DELETE FROM villabyte_auth_attempts WHERE key=$1", [key]);
-    return json({ success: true, user: { email } }, 200, { "Set-Cookie": await makeCookie(env, email) });
+    return json({ success: true, user: { email: account.email, role: account.role } }, 200, { "Set-Cookie": await makeCookie(env, account) });
   }
   if (path === "/api/admin/logout" && method === "POST") {
     if (!await isAdmin(request, env)) return bad("Acceso no autorizado", 401);
