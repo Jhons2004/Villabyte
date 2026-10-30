@@ -133,11 +133,13 @@ async function probeMailScript(env: Env): Promise<MailProbe> {
     if (!response.ok) return { online: false, notification: false, reply: false, version: "", reason: "Apps Script no responde HTTP 200 ("+response.status+")" };
     const data = await response.json() as Row;
     const online = data.ok === true && data.status === "online";
-    const reply = online && data.capabilities?.reply_to_customer === true;
+    // The original v1 can still notify. v2 reports actual Script Properties readiness.
+    const notification = online && data.capabilities?.notification !== false;
+    const reply = notification && data.capabilities?.reply_to_customer === true;
     return {
-      online, notification: online, reply,
+      online, notification, reply,
       version: clean(data.service, 80),
-      reason: !online ? "No se confirmó la Web App de Google" : !reply ? "La Web App está en versión antigua: publica villabyte-mail-v2.gs para responder clientes" : ""
+      reason: !online ? "No se confirmó la Web App de Google" : !notification ? "Apps Script v2 aún no tiene API_KEY o DESTINATION_EMAIL válidos" : !reply ? "La Web App no confirma respuestas a clientes: publica villabyte-mail-v2.gs con REPLY_API_KEY" : ""
     };
   } catch (err) {
     console.error("Fallo de diagnóstico Apps Script", err);
