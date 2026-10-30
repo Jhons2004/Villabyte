@@ -327,21 +327,29 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (!selected) return bad("Servicio no disponible");
     const count = await rows(db, "SELECT COUNT(*)::int AS n FROM villabyte_requests WHERE email=$1 AND created_at>NOW()-INTERVAL '15 minutes'", [email]);
     if (Number(count[0]?.n || 0) >= 5) return bad("Límite de solicitudes alcanzado; inténtalo más tarde", 429);
+    // Validate all images BEFORE uploading any, to avoid orphaned R2 objects
+    // when a later attachment is invalid.
+    const verified: { buffer: ArrayBuffer; filename: string; type: string; ext: string }[] = [];
+    for (const part of images) {
+      if (!(part instanceof File)) return bad("Los adjuntos deben ser imágenes", 400);
+      if (part.size === 0 || part.size > MAX_IMAGE_BYTES) return bad("Cada imagen debe pesar máximo 3 MB", 413);
+      if (!["image/jpeg", "image/png", "image/webp"].includes(part.type)) return bad("Solo se aceptan fotos JPG, PNG o WebP", 400);
+      const buffer = await part.arrayBuffer();
+      const format = sniffImage(new Uint8Array(buffer));
+      if (!format || format.type !== part.type) return bad("Una imagen no coincide con su formato real", 400);
+      verified.push({
+        buffer, filename: clean(part.name.replace(/[\\/]/g, "_"), 120) || ("foto." + format.ext),
+        type: format.type, ext: format.ext
+      });
+    }
     const id = crypto.randomUUID();
     const uploaded: ImageUpload[] = [];
     try {
-      for (const part of images) {
-        if (!(part instanceof File)) return bad("Los adjuntos deben ser imágenes", 400);
-        if (part.size === 0 || part.size > MAX_IMAGE_BYTES) return bad("Cada imagen debe pesar máximo 3 MB", 413);
-        if (!["image/jpeg", "image/png", "image/webp"].includes(part.type)) return bad("Solo se aceptan fotos JPG, PNG o WebP", 400);
-        const buffer = await part.arrayBuffer();
-        const format = sniffImage(new Uint8Array(buffer));
-        if (!format || format.type !== part.type) return bad("Una imagen no coincide con su formato real", 400);
+      for (const image of verified) {
         const fileId = crypto.randomUUID();
-        const key = "requests/" + id + "/" + fileId + "." + format.ext;
-        const filename = clean(part.name.replace(/[\\/]/g, "_"), 120) || ("foto." + format.ext);
-        await env.MEDIA!.put(key, buffer, { httpMetadata: { contentType: format.type } });
-        uploaded.push({ id: fileId, object_key: key, filename, content_type: format.type, byte_size: buffer.byteLength });
+        const key = "requests/" + id + "/" + fileId + "." + image.ext;
+        await env.MEDIA!.put(key, image.buffer, { httpMetadata: { contentType: image.type } });
+        uploaded.push({ id: fileId, object_key: key, filename: image.filename, content_type: image.type, byte_size: image.buffer.byteLength });
       }
       // Atomic metadata and request insert. The original request JSON contract remains intact.
       await rows(db, `WITH inserted AS (
