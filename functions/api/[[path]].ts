@@ -480,17 +480,18 @@ async function route(request: Request, env: Env): Promise<Response> {
     return bad("Esta cuenta puede revisar las solicitudes, pero no modificarlas",403);
   if (path === "/api/admin/mail-status" && method === "GET") {
     const probe = await probeMailScript(env);
-    const replyKey = !!env.GOOGLE_APPS_SCRIPT_REPLY_KEY;
+    const mailConfigured = !!env.GOOGLE_APPS_SCRIPT_KEY;
+    const replyKey = !!(env.GOOGLE_APPS_SCRIPT_REPLY_KEY || env.GOOGLE_APPS_SCRIPT_KEY);
     const enabled = env.GOOGLE_SCRIPT_REPLY_ENABLED !== "false";
     return json({
       mail_configured: !!env.GOOGLE_APPS_SCRIPT_KEY,
       notifications_ready: probe.notification,
-      reply_configured: !!env.GOOGLE_APPS_SCRIPT_KEY && replyKey && env.GOOGLE_SCRIPT_REPLY_ENABLED !== "false",
+      reply_configured: mailConfigured && replyKey && enabled && probe.reply,
       script_online: probe.online,
       script_version: probe.version,
       missing_reply_key: !replyKey,
       reply_enabled: enabled,
-      reason: probe.reason || (!replyKey ? "Falta GOOGLE_APPS_SCRIPT_REPLY_KEY" : !enabled ? "Configura GOOGLE_SCRIPT_REPLY_ENABLED=true en Cloudflare para activar respuestas" : "")
+      reason: !enabled ? "Respuestas deshabilitadas por GOOGLE_SCRIPT_REPLY_ENABLED=false" : probe.reason
     });
   }
   // Test the EXISTING deployed Apps Script with a real POST, without replacing it.
@@ -629,10 +630,13 @@ async function route(request: Request, env: Env): Promise<Response> {
       { id: replyId, date: new Date().toISOString(), text: message, sent: false, author: operator.email }];
     await rows(db, "UPDATE villabyte_requests SET replies=$1::jsonb,status='contactado' WHERE id=$2", [JSON.stringify(replies), match[1]]);
     let emailed=false;
-    if (env.GOOGLE_APPS_SCRIPT_KEY && env.GOOGLE_APPS_SCRIPT_REPLY_KEY && env.GOOGLE_SCRIPT_REPLY_ENABLED !== "false") {
+    // Cloudflare already keeps API_KEY private. REPLY_KEY is optional;
+    // when absent, the same existing Apps Script API_KEY authenticates replies.
+    if (env.GOOGLE_APPS_SCRIPT_KEY && env.GOOGLE_SCRIPT_REPLY_ENABLED !== "false") {
       try {
         const response = await emailFromScript(env, {
-          action: "reply_to_customer", replyKey: env.GOOGLE_APPS_SCRIPT_REPLY_KEY,
+          action: "reply_to_customer",
+          replyKey: env.GOOGLE_APPS_SCRIPT_REPLY_KEY || env.GOOGLE_APPS_SCRIPT_KEY,
           recipient: requestItem.email, requestId: requestItem.id,
           subject: "Villabyte - Respuesta a solicitud "+requestItem.id.slice(0,8),
           message, website: ""

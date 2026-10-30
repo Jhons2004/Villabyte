@@ -6,7 +6,7 @@
  *
  * Script Properties requeridas:
  *   API_KEY          = clave nueva SOLO para Backend Cloudflare Pages Functions
- *   REPLY_API_KEY    = segunda clave diferente SOLO para Backend Cloudflare Pages Functions
+ *   REPLY_API_KEY    = opcional; si no existe, se reutiliza API_KEY privada del backend para respuestas
  *   DESTINATION_EMAIL = jonasvillavicencio845@gmail.com
  *   SECONDARY_NOTIFICATION_EMAIL = (email de segunda administradora, opcional)
  *   SITE_NAME        = Villabyte
@@ -56,7 +56,9 @@ function doGet() {
   // Health only: never expose API keys, recipient addresses or personal data.
   var cfg = vbProps_();
   var notification = !!cfg.API_KEY && vbEmail_(cfg.DESTINATION_EMAIL || "");
-  var reply = notification && !!cfg.REPLY_API_KEY;
+  // Compatible con el servicio actual: API_KEY protege también las respuestas.
+  // Si se configura REPLY_API_KEY por separado, se usa esa clave adicional.
+  var reply = notification && !!(cfg.REPLY_API_KEY || cfg.API_KEY);
   return vbJson_({ ok: true, status: "online", service: "Villabyte MailApp API v2",
     capabilities: { notification: notification, reply_to_customer: reply },
     timestamp: new Date().toISOString() });
@@ -77,7 +79,8 @@ function doPost(e) {
     var siteName = cfg.SITE_NAME || "Villabyte";
 
     if (action === "reply_to_customer") {
-      if (!cfg.REPLY_API_KEY || d.replyKey !== cfg.REPLY_API_KEY)
+      var replyKey = cfg.REPLY_API_KEY || cfg.API_KEY;
+      if (!replyKey || d.replyKey !== replyKey)
         throw new Error("No autorizado para responder.");
       var recipient = vbClean_(d.recipient, 160).toLowerCase();
       var requestId = vbClean_(d.requestId, 80);
@@ -85,12 +88,17 @@ function doPost(e) {
       if (!vbEmail_(recipient) || !/^[0-9a-f-]{36}$/i.test(requestId) || answer.length < 10)
         throw new Error("Respuesta inválida.");
       vbLimit_("reply_" + vbDigest_(requestId), 8, 3600);
+      var ticketLink = "https://villabyte.pages.dev/#ticket";
       vbSend_({ to: recipient, name: senderName,
+        replyTo: cfg.DESTINATION_EMAIL,
         subject: "[Villabyte] Respuesta a solicitud " + requestId.substring(0,8),
-        body: answer, htmlBody: "<div style='font-family:Arial,sans-serif;max-width:650px;padding:24px'>" +
+        body: answer + "\n\nConsulta y responde en tu ticket: " + ticketLink +
+          "\nCódigo de solicitud: " + requestId.substring(0,8),
+        htmlBody: "<div style='font-family:Arial,sans-serif;max-width:650px;padding:24px'>" +
           "<h2 style='color:#9a702e'>Villabyte | Respuesta a tu solicitud</h2>" +
           "<p style='white-space:pre-wrap'>" + vbEscape_(answer) + "</p>" +
-          "<hr><small>Código: " + vbEscape_(requestId) + "</small></div>" });
+          "<p><a href='" + ticketLink + "'>Consultar mi ticket y responder</a></p>" +
+          "<hr><small>Código de solicitud: " + vbEscape_(requestId.substring(0,8)) + "</small></div>" });
       return vbJson_({ ok: true, action: "reply_to_customer", recipient: recipient,
         requestId: requestId, timestamp: new Date().toISOString() });
     }

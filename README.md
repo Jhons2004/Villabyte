@@ -1,5 +1,22 @@
 # Villabyte 2.0 — Cloudflare Pages + Pages Functions + Neon
 
+
+## Correo: responder al cliente con el Apps Script existente (actualización)
+
+**Importante:** en el código de contacto originalmente desplegado, `MailApp.sendEmail({to:config.DESTINATION_EMAIL,replyTo:correo})` únicamente notifica al propietario. `replyTo` permite responder manualmente desde Gmail pero NO envía un mensaje desde el CMS al visitante.
+
+La ampliación compatible respeta la misma `API_KEY`, misma URL `/exec` y los mismos avisos comerciales. Además, atiende `action:"reply_to_customer"` y hace `MailApp.sendEmail({to: recipient, replyTo:config.DESTINATION_EMAIL, ...})`. El backend obtiene **recipient del correo verificado que ya está guardado en la solicitud de Neon**, nunca de una entrada libre de la web.
+
+- **Versión lista para pegar, basada en el código de contacto original compartido por el titular:** archivo `Villabyte_Contacto_Con_Respuestas.gs` entregado en la conversación.
+- **Alternativa del repositorio:** `integrations/google-apps-script/villabyte-mail-v2.gs`, ahora con reutilización segura de la `API_KEY` existente para respuestas. La clave adicional `REPLY_API_KEY` es **opcional**, pero si ya está configurada se respeta.
+- **No vuelvas a ejecutar `configurarApiComercial()`** al sustituir código: conserva las propiedades actuales, API_KEY y DESTINATION_EMAIL. Actualiza la implementación existente en **Implementar → Administrar implementaciones → Editar → Nueva versión**; no crees una URL diferente.
+- Cloudflare solo necesita `GOOGLE_APPS_SCRIPT_KEY`, que ya se usa para avisos, y `GOOGLE_APPS_SCRIPT_URL` o el valor predeterminado existente. `GOOGLE_APPS_SCRIPT_REPLY_KEY` es opcional. Si el kill switch `GOOGLE_SCRIPT_REPLY_ENABLED` está guardado en `false`, cambia a `true` tras publicar el script compatible.
+- El CMS seguirá guardando la respuesta en el ticket incluso si Google rechaza el envío. **Solo la marcará como correo enviado al destinatario cuando la API confirme `action`, `recipient` y `requestId` exactamente.** No equivale a confirmación de lectura en Gmail.
+- El remitente efectivo lo determina **la cuenta Google que ejecuta el Apps Script**, no el valor `SENDER_NAME` ni el `replyTo`. Para enviar como `jonasvillavicencio845@gmail.com`, la aplicación web debe ejecutarse desde esa cuenta o un alias legítimamente autorizado.
+
+Validación con servicios simulados realizada: aviso llega al destinatario comercial; respuesta va al cliente; una clave de respuesta incorrecta no genera envío. **No se ha enviado un correo real ni se ha cambiado la implementación alojada en Google desde GitHub.**
+
+
 Sitio comercial de Villabyte en Guatemala. Arquitectura adaptada de Express/Render a Cloudflare Pages + Pages Functions (runtime de Cloudflare Workers): frontend React 19/Vite, CMS, 35 servicios, 16 proyectos, solicitudes y respuestas por Google Apps Script.
 
 ## Arquitectura
