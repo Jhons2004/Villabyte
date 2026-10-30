@@ -84,3 +84,16 @@ test("CMS mail workflow supports diagnostics, a protected retry and safe custome
   assert.ok(script.includes("capabilities: { notification: notification, reply_to_customer: reply }"));
   assert.ok(!frontend.includes("GOOGLE_APPS_SCRIPT_KEY="));
 });
+
+test("existing Apps Script is tested by a protected POST without modifying the remote script", () => {
+  const worker = read("functions/api/[[path]].ts");
+  const frontend = read("src/App.tsx");
+  assert.ok(worker.includes('path === "/api/admin/mail-test" && method === "POST"'));
+  assert.ok(worker.indexOf('if (!await isAdmin(request, env))') < worker.indexOf('path === "/api/admin/mail-test"'));
+  assert.ok(worker.includes('subject: "PRUEBA de correo CMS - " + reference'));
+  assert.ok(worker.includes('emailFromScript(env, {'));
+  assert.ok(worker.includes("provider_accepted: true"));
+  assert.ok(frontend.includes("Enviar correo de prueba"));
+  assert.ok(frontend.includes('api("/api/admin/mail-test",{method:"POST"})'));
+  assert.ok(frontend.includes("mail_configured:status.mail_configured"));
+});
