@@ -94,6 +94,16 @@ El segundo destinatario se establece en propiedades privadas, no en el formulari
 Después de guardar, publicar nueva versión desde Apps Script, volver a desplegar Pages, probar `/api/health` y un formulario controlado. El campo `mail_configured` solo informa que la clave existe, **no verifica la entrega real**.
 
 
+## Probar el endpoint de correo ya publicado sin modificar Google Apps Script
+
+El panel tiene un botón **Enviar correo de prueba** en `https://villabyte.pages.dev/#admin`, pestaña **Solicitudes**. Hace un POST real desde Cloudflare Pages Functions al **mismo endpoint Google Apps Script ya desplegado** mediante `GOOGLE_APPS_SCRIPT_URL` (o URL actual integrada por defecto), con la clave privada `GOOGLE_APPS_SCRIPT_KEY`. No reemplaza ni redepliega el script de Google ni crea solicitudes en Neon.
+
+La petición utiliza el contrato existente `apiKey,name,email,phone,company,subject,message,page,website` y es compatible con el Apps Script v1 que solamente envía avisos al correo del propietario. El formulario v1 ignora el campo opcional `action`. La prueba envía una notificación real a `DESTINATION_EMAIL` definido dentro del Apps Script; **no necesariamente** al correo visible en el CMS si Google tiene otra configuración.
+
+**Para ejecutarla:** entra como administrador → Solicitudes → **Enviar correo de prueba**. Si devuelve éxito, Google confirmó la aceptación de la llamada: busca el mensaje `PRUEBA de correo CMS` en el correo destino configurado en el propio Apps Script, incluidos spam/promociones. Si falla, revisa `GOOGLE_APPS_SCRIPT_KEY` en Cloudflare Production y `API_KEY` en las propiedades de Apps Script: ambos valores deben coincidir. El botón puede ejecutarse incluso si la comprobación GET de estado de Google no funciona, porque la prueba usa POST real. No hace falta alterar la implementación de Google para probar sus notificaciones.
+
+**Nota:** `/api/health` con `mail_configured:true` solo verifica que Cloudflare tiene el secreto; **no demuestra entrega de correo**. El código original de Apps Script de contacto solo envía avisos al propietario y no responde al correo del cliente. Por eso el botón **Enviar respuesta** se mantiene protegido hasta que se disponga de una operación autorizada para responder al destinatario.
+
 ## Correo desde el CMS: completar activación y recuperar solicitudes pendientes
 
 **Estado del despliegue:** los cambios de backend/frontend se publican en GitHub. La **Web App de Google Apps Script se debe actualizar desde el editor de Google** y sus claves deben configurarse como Secrets en Cloudflare. Publicar GitHub NO publica el script de Google automáticamente.
