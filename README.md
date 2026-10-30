@@ -160,6 +160,42 @@ ALTER TABLE villabyte_requests
 Esta migración ya se ejecutó en el proyecto Neon exclusivo de Villabyte. El reintento utiliza un bloqueo temporal por registro para reducir envíos duplicados. La integración de Google Apps Script no es SMTP directo: utiliza `MailApp.sendEmail()`, sujeto a cuotas diarias de Google.
 
 
+
+## Imágenes en solicitudes (Cloudflare R2 privado)
+
+El formulario comercial permite adjuntar **hasta 3 fotografías por solicitud**, de **máximo 3 MB por imagen**, solamente **JPG, PNG y WebP**. El navegador muestra vistas previas. El backend verifica el formato real del archivo por sus primeros bytes, limita el tamaño y protege la recepción contra otros tipos de archivos. La solicitud mantiene su ID de Neon y no se pierde si el correo comercial falla.
+
+**Arquitectura:**
+- Las imágenes originales se guardan en un **bucket R2 privado**, sin acceso público ni dominio `r2.dev`.
+- Neon solo conserva metadatos e identificadores de imágenes en `villabyte_request_attachments`, asociados al ID de `villabyte_requests`.
+- El CMS muestra miniaturas únicamente a administradores autenticados. El backend verifica la cookie de sesión y entrega los archivos por rutas privadas `/api/admin/requests/:id/images/:imageId`, con `Cache-Control: private, no-store`.
+- La notificación que ya envía Google Apps Script mantiene su formato y solo menciona el número de fotografías; no se modifica el endpoint SMTP/API existente y no se publican enlaces a imágenes en Gmail.
+- La carga es opcional. **Sin R2 configurado, las solicitudes de texto siguen funcionando y el selector de fotos aparece deshabilitado**, en vez de aceptar archivos que no podríamos conservar.
+
+### Activación en Cloudflare (una vez por cuenta)
+
+1. En `https://dash.cloudflare.com/` abre **Storage & databases → R2 → Overview**. Si es la primera vez, Cloudflare puede solicitar activar la suscripción de R2 y un método de pago; **revisa los cargos por excedentes antes de aceptar**.
+2. Crea el bucket privado **`villabyte-solicitudes`**, clase **Standard**. No actives *Public bucket* ni `r2.dev`.
+3. El proyecto Pages actual utiliza `wrangler.toml` como fuente de configuración. **Después de crear el bucket**, agrega al final de `wrangler.toml`:
+
+   ```toml
+   [[r2_buckets]]
+   binding = "MEDIA"
+   bucket_name = "villabyte-solicitudes"
+   ```
+
+4. Confirma que la rama principal se despliegue con **Success**. También puede configurarse la vinculación desde Settings → Bindings → R2 bucket en proyectos cuyo control de configuración sea el dashboard. En Villabyte prioriza el archivo `wrangler.toml`.
+5. Abre `https://villabyte.pages.dev/api/attachments/config`: debe devolver `enabled: true`. Verifica que el selector de imágenes se habilite.
+6. Crea una solicitud de prueba con una foto JPG, PNG o WebP de menos de 3 MB y verifica en `/#admin` que aparece la imagen y que el botón abre la imagen **solo al estar autenticado**. Repite sin iniciar sesión en una ventana privada: debe responder 401.
+7. Prueba también el formulario sin fotos, para comprobar compatibilidad con el flujo antiguo.
+
+### Migración de Neon realizada
+
+La tabla `villabyte_request_attachments` se creó en el proyecto Neon Villabyte, con ID de adjunto UUID, referencia a solicitud UUID, nombre original, tipo real, tamaño, clave privada de R2 y fecha. No se alteraron ni borraron las solicitudes anteriores. No se guardan contraseñas ni URL pública de las fotos en Neon.
+
+**Retención y seguridad:** define una política de conservación/eliminación de fotografías y revisa el consumo de R2. El bucket Standard incluye cierta cuota gratuita mensual, pero **puede generar facturación al superar los límites**. No almacenes documentos personales, credenciales ni imágenes sensibles en los adjuntos. Las fotografías no se envían como adjuntos de correo; se consultan desde el CMS privado.
+
+
 ## Desarrollo local
 
 Node.js 22+.
