@@ -211,12 +211,12 @@ export default function App(){
      <div className="vb-mail-diagnostic" role="status">
        <div><strong>Correo de Villabyte</strong>
         <p>{mailStatus===null?"Comprobando configuración...":mailStatus.mail_configured?"Cloudflare reconoce la clave de Apps Script. Prueba ahora el envío real.":"Falta GOOGLE_APPS_SCRIPT_KEY en Cloudflare. El código del Apps Script existente no necesita cambios."}</p>
-        <p>{mailStatus?.reply_configured?"Respuestas a clientes desde CMS: habilitadas.":"Avisos al propietario y respuestas a clientes son operaciones diferentes. El botón de respuesta requiere un endpoint que admita responder al cliente; mientras tanto usa «Abrir en mi correo»."}</p>
+        <p>Responder al ticket: disponible. {mailStatus?.reply_configured?"Envío al correo del cliente: configurado; se confirmará al enviar.":"Envío al correo del cliente: pendiente de confirmación con el endpoint. Las respuestas quedan visibles en el ticket."}</p>
        </div>
-       <div className="vb-mail-diagnostic-actions">
+       {adminUser?.role==="owner"&&<div className="vb-mail-diagnostic-actions">
         <button type="button" className="vb-mini-action" onClick={refreshMail} disabled={mailBusy!==null}>Revisar estado</button>
         <button type="button" className="vb-button vb-primary" onClick={testMailEndpoint} disabled={mailBusy!==null}>{mailBusy==="test"?"Probando endpoint...":"Enviar correo de prueba"} <Send size={15}/></button>
-       </div>
+       </div>}
      </div>
      {requests.length===0?<p className="vb-empty">Aún no hay solicitudes registradas.</p>:requests.map(r=><article key={r.id} className="vb-inbox-card"><div className="vb-inbox-meta"><strong>{r.name}</strong><span>{new Date(r.created_at).toLocaleString("es-GT")}</span><select aria-label="Estado" value={r.status} disabled={adminUser?.role==="reviewer"} onChange={e=>updateStatus(r,e.target.value)}>{["nuevo","contactado","en_proceso","cerrado"].map(s=><option key={s} value={s}>{s.replace("_"," ")}</option>)}</select></div><div className="vb-inbox-mail"><span>{r.service_title}</span><a href={"mailto:"+r.email}>{r.email}</a><span>{r.phone||"Sin teléfono"}</span><span>Notificación: {r.email_sent?"enviada":"pendiente"}</span>{adminUser?.role==="owner"&&!r.email_sent&&<button className="vb-mini-action" type="button" disabled={mailBusy!==null||!mailer.mail_configured} title={!mailer.mail_configured?"Verifica y configura Apps Script antes de reenviar":"Reenviar esta solicitud sin duplicarla en Neon"} onClick={()=>retryNotification(r)}>{mailBusy==="notify:"+r.id?"Enviando...":"Reenviar aviso"}</button>}</div><p className="vb-request-desc">{r.description}</p>
     {!!r.client_messages?.length&&<div className="vb-ticket-admin-thread"><strong>Mensajes del cliente</strong>{r.client_messages.map(m=><div className="vb-history" key={m.id}><strong>{m.sender_email}</strong> · {new Date(m.created_at).toLocaleString("es-GT")}<p>{m.body}</p></div>)}</div>}
