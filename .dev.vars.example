@@ -4,6 +4,10 @@
 DATABASE_URL=
 ADMIN_EMAIL=jonasvillavicencio845@gmail.com
 ADMIN_PASSWORD=
+# Segunda administradora: usar su propio correo y una contraseña distinta >= 12 caracteres.
+# No se activa hasta establecer ambas variables Secret en Cloudflare.
+SECONDARY_ADMIN_EMAIL=
+SECONDARY_ADMIN_PASSWORD=
 SESSION_SECRET=
 
 GOOGLE_APPS_SCRIPT_URL=https://script.google.com/macros/s/AKfycbznNNt_-UqwNrL9XDnodbrfHi9KrHtCH8xRONz7N7seKT1jSPARnPR2mycLCT1Sk-RR/exec
