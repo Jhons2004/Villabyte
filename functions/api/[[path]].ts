@@ -320,6 +320,34 @@ async function route(request: Request, env: Env): Promise<Response> {
       reason: probe.reason || (!replyKey ? "Falta GOOGLE_APPS_SCRIPT_REPLY_KEY" : !enabled ? "Configura GOOGLE_SCRIPT_REPLY_ENABLED=true en Cloudflare para activar respuestas" : "")
     });
   }
+  // Test the EXISTING deployed Apps Script with a real POST, without replacing it.
+  // This is an authenticated, explicit action: do not send during health checks.
+  if (path === "/api/admin/mail-test" && method === "POST") {
+    if (!env.GOOGLE_APPS_SCRIPT_KEY)
+      return bad("Falta GOOGLE_APPS_SCRIPT_KEY en los Secrets de Cloudflare. El endpoint de Google no necesita cambios.", 503);
+    const owner = clean(env.ADMIN_EMAIL, 180).toLowerCase();
+    if (!validMail(owner)) return bad("ADMIN_EMAIL no está configurado correctamente", 503);
+    const reference = crypto.randomUUID().slice(0, 8);
+    try {
+      const result = await emailFromScript(env, {
+        action: "new_request", name: "Prueba técnica Villabyte",
+        email: owner, phone: "", company: "Villabyte",
+        subject: "PRUEBA de correo CMS - " + reference,
+        message: "PRUEBA INTERNA: Se está verificando el endpoint de correo comercial desde el panel de Villabyte. No es una solicitud de un cliente. Referencia: " + reference + ". Fecha: " + new Date().toISOString(),
+        page: url.origin + "/#admin", website: ""
+      });
+      if (!result.ok || result.filtered === true)
+        return bad("Google Apps Script no confirmó el envío.", 502);
+      return json({
+        success: true, provider_accepted: true, reference,
+        message: "El endpoint de Apps Script respondió correctamente. Confirma que el mensaje de prueba llegó a la bandeja de destino configurada en Google.",
+        timestamp: new Date().toISOString()
+      });
+    } catch (err) {
+      console.error("Test del endpoint existente de Apps Script falló", err);
+      return bad("No se pudo completar la prueba por Google Apps Script. Comprueba la API_KEY y revisa el registro de Functions.", 502);
+    }
+  }
   const db = getDb(env);
   if (path === "/api/config" && method === "PUT") {
     const body = await payload(request);
