@@ -40,3 +40,24 @@ test("Cloudflare Pages Functions replaces legacy Node server and keeps secrets s
   assert.equal(pkg.scripts.build, "npm run test && vite build");
   assert.ok(!JSON.stringify(pkg.scripts).includes("server.ts"));
 });
+
+test("two independent administrator accounts and private dual email notification are wired", () => {
+  const worker = read("functions/api/[[path]].ts");
+  const script = read("integrations/google-apps-script/villabyte-mail-v2.gs");
+  const frontend = read("src/App.tsx");
+  const env = read(".dev.vars.example");
+
+  assert.ok(worker.includes("SECONDARY_ADMIN_EMAIL"));
+  assert.ok(worker.includes("SECONDARY_ADMIN_PASSWORD"));
+  assert.ok(worker.includes("type AdminAccount"));
+  assert.ok(worker.includes("getAdmin(request, env)"));
+  assert.ok(worker.includes("sessionRevision"));
+  assert.ok(worker.includes('role: "owner" | "administrator"'));
+  assert.ok(frontend.includes("setAdminUser"));
+  assert.ok(frontend.includes("Si la olvidaste"));
+  assert.ok(script.includes("SECONDARY_NOTIFICATION_EMAIL"));
+  assert.ok(script.includes("mailOptions.cc = secondary"));
+  assert.ok(env.includes("SECONDARY_ADMIN_EMAIL="));
+  assert.ok(!frontend.includes("SECONDARY_ADMIN_PASSWORD"));
+  assert.ok(!frontend.includes("GOOGLE_APPS_SCRIPT_KEY="));
+});
