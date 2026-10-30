@@ -7,7 +7,13 @@
  */
 import { neon } from "@neondatabase/serverless";
 
+type PrivateImageBucket = {
+  put(key: string, value: ArrayBuffer, options: { httpMetadata: { contentType: string } }): Promise<unknown>;
+  get(key: string): Promise<{ body: ReadableStream; size: number } | null>;
+  delete(key: string): Promise<void>;
+};
 interface Env {
+  MEDIA?: PrivateImageBucket;
   DATABASE_URL: string;
   ADMIN_EMAIL: string;
   ADMIN_PASSWORD: string;
@@ -27,6 +33,17 @@ type DB = ReturnType<typeof neon>;
 
 const COOKIE = "villabyte_session";
 const SESSION_MS = 12 * 60 * 60 * 1000;
+const MAX_IMAGES = 3;
+const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
+const MAX_UPLOAD_BODY = 10 * 1024 * 1024;
+type ImageUpload = { id: string; object_key: string; filename: string; content_type: string; byte_size: number };
+function sniffImage(bytes: Uint8Array): { type: string; ext: string } | null {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return { type: "image/jpeg", ext: "jpg" };
+  if (bytes.length >= 8 && [137, 80, 78, 71, 13, 10, 26, 10].every((v, i) => bytes[i] === v)) return { type: "image/png", ext: "png" };
+  if (bytes.length >= 12 && String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" && String.fromCharCode(...bytes.slice(8, 12)) === "WEBP") return { type: "image/webp", ext: "webp" };
+  return null;
+}
+
 const DEFAULT_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbznNNt_-UqwNrL9XDnodbrfHi9KrHtCH8xRONz7N7seKT1jSPARnPR2mycLCT1Sk-RR/exec";
 const json = (data: unknown, status = 200, extra?: Record<string, string>) =>
   new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", ...(extra || {}) } });
@@ -156,7 +173,9 @@ async function sendOwnerNotice(db: DB, env: Env, item: Row, page: string): Promi
       action: "new_request", requestId: item.id,
       name: item.name, email: item.email, phone: item.phone || "",
       company: "", subject: "Solicitud " + String(item.id).slice(0, 8) + " - " + item.service_title,
-      message: String(item.description) + "\n\nCódigo: " + item.id + "\nServicio: " + item.service_title,
+      message: String(item.description) + "\n\nCódigo: " + item.id + "\nServicio: " + item.service_title +
+        "\nFotos adjuntas: " + ((await rows(db, "SELECT COUNT(*)::int AS n FROM villabyte_request_attachments WHERE request_id=$1", [item.id]))[0]?.n || 0) +
+        " (consultar privadamente en el panel de Villabyte)",
       page, website: ""
     });
     if (response.ok !== true || response.filtered === true)
@@ -238,6 +257,8 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (method === "OPTIONS") return json({ ok: true }, 200, { Allow: "GET, POST, PUT, PATCH, DELETE, OPTIONS" });
   if (mutating && !validOrigin(request)) return bad("Origen no permitido", 403);
   if (!path.startsWith("/api/")) return bad("Ruta no encontrada", 404);
+  if (path === "/api/attachments/config" && method === "GET")
+    return json({ enabled: !!env.MEDIA, max_files: MAX_IMAGES, max_file_bytes: MAX_IMAGE_BYTES, types: ["image/jpeg", "image/png", "image/webp"] });
 
   if (path === "/api/health" && method === "GET") {
     if (!env.DATABASE_URL) return json({ ok: false, database: false, mail_configured: !!env.GOOGLE_APPS_SCRIPT_KEY, reply_configured: env.GOOGLE_SCRIPT_REPLY_ENABLED === "true" }, 503);
@@ -283,8 +304,18 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (contentTypes.includes(contentKey) && method === "GET") return json(await readCms(getDb(env), contentKey));
 
   if (path === "/api/requests" && method === "POST") {
-    const body = await payload(request);
+    const multipart = (request.headers.get("content-type") || "").toLowerCase().includes("multipart/form-data");
+    const contentLength = Number(request.headers.get("content-length") || 0);
+    if (multipart && contentLength > MAX_UPLOAD_BODY) return bad("El envío supera el límite de 10 MB", 413);
+    const form = multipart ? await request.formData() : null;
+    const body: Row = form
+      ? Object.fromEntries(["name", "email", "phone", "service_id", "description", "website", "turnstileToken"].map(k => [k, typeof form.get(k) === "string" ? form.get(k) : ""]))
+      : await payload(request);
+    if (form) body.accepted = form.get("accepted") === "true";
     if (body.website) return json({ ok: true }); // anti-spam field
+    const images = form ? form.getAll("images") : [];
+    if (images.length > MAX_IMAGES) return bad("Puedes adjuntar un máximo de 3 imágenes", 400);
+    if (images.length && !env.MEDIA) return bad("Las fotos todavía no están habilitadas. Contacta a Villabyte o envía tu solicitud sin imágenes.", 503);
     const name = clean(body.name, 100), email = clean(body.email, 150).toLowerCase();
     const phone = clean(body.phone, 40), serviceId = clean(body.service_id, 120);
     const description = clean(body.description, 2000);
@@ -297,10 +328,38 @@ async function route(request: Request, env: Env): Promise<Response> {
     const count = await rows(db, "SELECT COUNT(*)::int AS n FROM villabyte_requests WHERE email=$1 AND created_at>NOW()-INTERVAL '15 minutes'", [email]);
     if (Number(count[0]?.n || 0) >= 5) return bad("Límite de solicitudes alcanzado; inténtalo más tarde", 429);
     const id = crypto.randomUUID();
-    await rows(db, "INSERT INTO villabyte_requests(id,name,email,phone,service_id,service_title,description,status,email_sent,replies) VALUES($1,$2,$3,$4,$5,$6,$7,'nuevo',FALSE,'[]'::jsonb)",
-      [id, name, email, phone, serviceId, selected.title, description]);
+    const uploaded: ImageUpload[] = [];
+    try {
+      for (const part of images) {
+        if (!(part instanceof File)) return bad("Los adjuntos deben ser imágenes", 400);
+        if (part.size === 0 || part.size > MAX_IMAGE_BYTES) return bad("Cada imagen debe pesar máximo 3 MB", 413);
+        if (!["image/jpeg", "image/png", "image/webp"].includes(part.type)) return bad("Solo se aceptan fotos JPG, PNG o WebP", 400);
+        const buffer = await part.arrayBuffer();
+        const format = sniffImage(new Uint8Array(buffer));
+        if (!format || format.type !== part.type) return bad("Una imagen no coincide con su formato real", 400);
+        const fileId = crypto.randomUUID();
+        const key = "requests/" + id + "/" + fileId + "." + format.ext;
+        const filename = clean(part.name.replace(/[\\/]/g, "_"), 120) || ("foto." + format.ext);
+        await env.MEDIA!.put(key, buffer, { httpMetadata: { contentType: format.type } });
+        uploaded.push({ id: fileId, object_key: key, filename, content_type: format.type, byte_size: buffer.byteLength });
+      }
+      // Atomic metadata and request insert. The original request JSON contract remains intact.
+      await rows(db, `WITH inserted AS (
+        INSERT INTO villabyte_requests(id,name,email,phone,service_id,service_title,description,status,email_sent,replies)
+        VALUES($1,$2,$3,$4,$5,$6,$7,'nuevo',FALSE,'[]'::jsonb) RETURNING id
+      ), images AS (
+        INSERT INTO villabyte_request_attachments (id, request_id, object_key, filename, content_type, byte_size)
+        SELECT a.id::uuid, inserted.id, a.object_key, a.filename, a.content_type, a.byte_size
+        FROM inserted CROSS JOIN jsonb_to_recordset($8::jsonb)
+          AS a(id text, object_key text, filename text, content_type text, byte_size integer)
+        RETURNING id
+      ) SELECT id FROM inserted`, [id, name, email, phone, serviceId, selected.title, description, JSON.stringify(uploaded)]);
+    } catch (error) {
+      await Promise.allSettled(uploaded.map(item => env.MEDIA!.delete(item.object_key)));
+      throw error;
+    }
     const notice = await sendOwnerNotice(db, env, { id, name, email, phone, service_title: selected.title, description }, url.origin + "/#solicitar");
-    return json({ ok: true, id, notified: notice.sent }, 201);
+    return json({ ok: true, id, notified: notice.sent, image_count: uploaded.length }, 201);
   }
 
   // Never reveal provider diagnostics or customer data without an admin session.
@@ -387,7 +446,29 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
 
   if (path === "/api/admin/requests" && method === "GET") {
-    return json(await rows(db, "SELECT * FROM villabyte_requests ORDER BY created_at DESC LIMIT 250"));
+    return json(await rows(db, `SELECT r.*,
+      COALESCE((SELECT jsonb_agg(jsonb_build_object(
+        'id',a.id,'filename',a.filename,'content_type',a.content_type,'byte_size',a.byte_size
+      ) ORDER BY a.created_at) FROM villabyte_request_attachments a WHERE a.request_id=r.id), '[]'::jsonb) AS attachments
+      FROM villabyte_requests r ORDER BY r.created_at DESC LIMIT 250`));
+  }
+  // Photos always require the same admin cookie as the inbox. No public R2 URLs exist.
+  const imageRoute = path.match(/^\/api\/admin\/requests\/([0-9a-f-]{36})\/images\/([0-9a-f-]{36})$/i);
+  if (imageRoute && method === "GET") {
+    if (!env.MEDIA) return bad("Almacenamiento de imágenes sin configurar", 503);
+    const item = await rows(db, "SELECT object_key, content_type FROM villabyte_request_attachments WHERE request_id=$1 AND id=$2", [imageRoute[1], imageRoute[2]]);
+    if (!item.length) return bad("Imagen no encontrada", 404);
+    const object = await env.MEDIA.get(item[0].object_key);
+    if (!object) return bad("Imagen no disponible", 404);
+    const suffix = item[0].content_type === "image/png" ? "png" : item[0].content_type === "image/webp" ? "webp" : "jpg";
+    return new Response(object.body, { status: 200, headers: {
+      "Content-Type": item[0].content_type,
+      "Content-Disposition": 'inline; filename="imagen.' + suffix + '"',
+      "Cache-Control": "private, no-store",
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "default-src 'none'; sandbox",
+      "Cross-Origin-Resource-Policy": "same-origin"
+    } });
   }
   const match = path.match(/^\/api\/admin\/requests\/([0-9a-f-]{36})(?:\/(reply|notify))?$/i);
   if (match && method === "POST" && match[2] === "notify") {
