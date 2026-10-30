@@ -32,3 +32,7 @@ button,input,textarea,select{font:inherit}button{cursor:pointer}button:disabled{
 .vb-inbox-mail .vb-mini-action{font-size:12px;padding:7px 12px}
 .vb-inbox-actions button:disabled{opacity:.65;cursor:not-allowed}
 @media(max-width:720px){.vb-mail-diagnostic{align-items:stretch;flex-direction:column}.vb-mail-diagnostic button{align-self:flex-start}}
+
+.vb-mail-diagnostic-actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;align-items:center;flex-shrink:0}
+.vb-mail-diagnostic-actions .vb-button{padding:11px 15px;font-size:12px;white-space:nowrap}
+@media(max-width:720px){.vb-mail-diagnostic-actions{align-items:stretch;justify-content:flex-start}.vb-mail-diagnostic-actions button{width:100%}}
