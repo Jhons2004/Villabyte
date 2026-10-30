@@ -61,3 +61,26 @@ test("two independent administrator accounts and private dual email notification
   assert.ok(!frontend.includes("SECONDARY_ADMIN_PASSWORD"));
   assert.ok(!frontend.includes("GOOGLE_APPS_SCRIPT_KEY="));
 });
+
+
+test("CMS mail workflow supports diagnostics, a protected retry and safe customer replies", () => {
+  const worker = read("functions/api/[[path]].ts");
+  const frontend = read("src/App.tsx");
+  const script = read("integrations/google-apps-script/villabyte-mail-v2.gs");
+
+  assert.ok(worker.includes('path === "/api/admin/mail-status"'));
+  assert.ok(worker.includes('match[2] === "notify"'));
+  assert.ok(worker.includes("sendOwnerNotice"));
+  assert.ok(worker.includes("notification_claimed_at"));
+  assert.ok(worker.includes("notification_attempts"));
+  assert.ok(worker.includes("last_notification_error"));
+  assert.ok(worker.includes("if (!await isAdmin(request, env))"));
+  assert.ok(worker.includes("if (!probe.reply)"));
+  assert.ok(worker.includes('response.action !== "reply_to_customer"'));
+  assert.ok(frontend.includes("retryNotification"));
+  assert.ok(frontend.includes("Reenviar aviso"));
+  assert.ok(frontend.includes("Verificar correo"));
+  assert.ok(frontend.includes("mailBusy"));
+  assert.ok(script.includes("capabilities: { notification: notification, reply_to_customer: reply }"));
+  assert.ok(!frontend.includes("GOOGLE_APPS_SCRIPT_KEY="));
+});

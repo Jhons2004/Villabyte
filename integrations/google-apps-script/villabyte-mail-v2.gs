@@ -5,8 +5,8 @@
  * El código usa Script Properties. NUNCA escribir API_KEY ni REPLY_API_KEY aquí.
  *
  * Script Properties requeridas:
- *   API_KEY          = clave nueva SOLO para Backend Render
- *   REPLY_API_KEY    = segunda clave diferente SOLO para Backend Render
+ *   API_KEY          = clave nueva SOLO para Backend Cloudflare Pages Functions
+ *   REPLY_API_KEY    = segunda clave diferente SOLO para Backend Cloudflare Pages Functions
  *   DESTINATION_EMAIL = jonasvillavicencio845@gmail.com
  *   SECONDARY_NOTIFICATION_EMAIL = (email de segunda administradora, opcional)
  *   SITE_NAME        = Villabyte
@@ -53,8 +53,13 @@ function vbSend_(options) {
   MailApp.sendEmail(options);
 }
 function doGet() {
+  // Health only: never expose API keys, recipient addresses or personal data.
+  var cfg = vbProps_();
+  var notification = !!cfg.API_KEY && vbEmail_(cfg.DESTINATION_EMAIL || "");
+  var reply = notification && !!cfg.REPLY_API_KEY;
   return vbJson_({ ok: true, status: "online", service: "Villabyte MailApp API v2",
-    capabilities: { notification: true, reply_to_customer: true }, timestamp: new Date().toISOString() });
+    capabilities: { notification: notification, reply_to_customer: reply },
+    timestamp: new Date().toISOString() });
 }
 function doPost(e) {
   try {

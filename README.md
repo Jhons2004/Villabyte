@@ -93,6 +93,63 @@ El segundo destinatario se establece en propiedades privadas, no en el formulari
 
 Después de guardar, publicar nueva versión desde Apps Script, volver a desplegar Pages, probar `/api/health` y un formulario controlado. El campo `mail_configured` solo informa que la clave existe, **no verifica la entrega real**.
 
+
+## Correo desde el CMS: completar activación y recuperar solicitudes pendientes
+
+**Estado del despliegue:** los cambios de backend/frontend se publican en GitHub. La **Web App de Google Apps Script se debe actualizar desde el editor de Google** y sus claves deben configurarse como Secrets en Cloudflare. Publicar GitHub NO publica el script de Google automáticamente.
+
+### 1. Web App Google Apps Script
+
+1. Abre el proyecto que corresponde a la URL de GOOGLE_APPS_SCRIPT_URL (la Web App existente).
+2. Guarda una copia del script actual. Sustituye su contenido por `integrations/google-apps-script/villabyte-mail-v2.gs`.
+3. Abre **Configuración del proyecto > Propiedades del script** y establece:
+   - `API_KEY`: nueva clave aleatoria; no la publiques ni uses una clave de demostración.
+   - `REPLY_API_KEY`: segunda clave aleatoria, diferente de API_KEY.
+   - `DESTINATION_EMAIL`: `jonasvillavicencio845@gmail.com`.
+   - `SECONDARY_NOTIFICATION_EMAIL`: correo de la administradora si corresponde, opcional.
+   - `SITE_NAME`: `Villabyte`.
+   - `SENDER_NAME`: `Villabyte | Atención comercial`.
+4. Implementa → Administrar implementaciones → Editar → **Nueva versión**, ejecución como titular y acceso apropiado para las llamadas HTTPS del backend.
+5. La URL `/exec` debe devolver `status:online` y `capabilities.reply_to_customer:true` cuando las propiedades estén completas.
+6. No ejecutes la función antigua `configurarApiComercial()`, porque sobrescribe el destinatario y la clave con valores de ejemplo.
+
+### 2. Cloudflare Pages (entorno Production)
+
+En **Workers & Pages > villabyte > Settings > Variables and Secrets** guarda como Secret:
+
+| Clave | Qué poner |
+| --- | --- |
+| `GOOGLE_APPS_SCRIPT_KEY` | Exactamente el mismo valor que API_KEY en Apps Script |
+| `GOOGLE_APPS_SCRIPT_REPLY_KEY` | Exactamente el mismo valor que REPLY_API_KEY en Apps Script |
+| `GOOGLE_SCRIPT_REPLY_ENABLED` | `true`, **solo después de confirmar el despliegue v2** |
+| `GOOGLE_APPS_SCRIPT_URL` | URL pública /exec de Apps Script; opcional si sigue siendo la ya configurada en código |
+
+Conserva `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD` y `SESSION_SECRET` tal como estén funcionando. No copies secretos en GitHub ni en React. Aplica el cambio mediante **un nuevo despliegue de main**.
+
+### 3. Validación desde el CMS
+
+- Abre `https://villabyte.pages.dev/#admin`.
+- En la pestaña **Solicitudes** aparece el nuevo bloque **Correo de Villabyte**. Pulsa **Verificar correo**: consulta de forma protegida el despliegue de Apps Script y detecta si soporta respuestas v2.
+- El estado `mail_configured` en `/api/health` solo significa que Cloudflare recibió la clave; no demuestra que el mensaje haya llegado. Se debe confirmar un envío real.
+- Las solicitudes que entraron antes de configurar el correo se conservan en Neon con `email_sent=false`. Pulsa **Reenviar aviso** en cada solicitud pendiente. No vuelve a crear la solicitud.
+- Al configurar las claves y activar respuestas, **Enviar respuesta** se habilita cuando la Web App v2 confirma su capacidad, el texto tiene al menos 10 caracteres y no hay otra operación activa.
+- Las respuestas exitosas se guardan en la columna `replies` de Neon y la solicitud cambia a `contactado`.
+- Si hay un error o demora durante un envío, **verifica primero en Gmail antes de intentarlo otra vez**, pues una respuesta de red ambigua puede producir mensajes duplicados. No se borra ni se marca como enviado un aviso que no fue confirmado.
+
+### 4. Compatibilidad de la base de datos
+
+La actualización añade **tres columnas no destructivas** a `villabyte_requests`:
+
+```sql
+ALTER TABLE villabyte_requests
+  ADD COLUMN IF NOT EXISTS notification_claimed_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS notification_attempts INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS last_notification_error TEXT;
+```
+
+Esta migración ya se ejecutó en el proyecto Neon exclusivo de Villabyte. El reintento utiliza un bloqueo temporal por registro para reducir envíos duplicados. La integración de Google Apps Script no es SMTP directo: utiliza `MailApp.sendEmail()`, sujeto a cuotas diarias de Google.
+
+
 ## Desarrollo local
 
 Node.js 22+.
