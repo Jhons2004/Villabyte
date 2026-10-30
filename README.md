@@ -64,6 +64,35 @@ En **Propiedades del script**:
 
 Actualizar mediante **Deploy → Manage deployments → Edit → New version**. La URL debe devolver `capabilities.reply_to_customer=true`. El backend no aceptará una respuesta como enviada a menos que el script confirme acción, destinatario e identificador.
 
+## Dos administradores y recuperación de acceso
+
+Villabyte tiene **dos cuentas administrativas independientes**: titular (owner) y una administradora secundaria opcional. Ambos inician sesión en `https://villabyte.pages.dev/#admin` con su propio correo y contraseña. Nunca comparten credenciales; ambos pueden gestionar solicitudes y contenidos del CMS. No se crea un usuario ni se activa la segunda cuenta hasta completar sus dos Secrets.
+
+En **Cloudflare → Workers & Pages → villabyte → Settings → Variables and Secrets (Production)**, usar tipo **Secret**:
+
+| Variable | Valor |
+| --- | --- |
+| `ADMIN_EMAIL` | `jonasvillavicencio845@gmail.com` (titular) |
+| `ADMIN_PASSWORD` | Contraseña nueva del titular, de preferencia 16+ caracteres; no es la contraseña de Gmail |
+| `SECONDARY_ADMIN_EMAIL` | Correo real de la administradora |
+| `SECONDARY_ADMIN_PASSWORD` | Una contraseña nueva y distinta de al menos 12 caracteres |
+| `SESSION_SECRET` | Clave de sesión aleatoria existente (32+ caracteres); no reemplazar si está funcionando, salvo rotación planificada |
+
+Si olvidaste la contraseña del administrador, **no se puede recuperar ni leer el Secret anterior**. Quien tenga acceso legítimo a Cloudflare puede **reemplazar `ADMIN_PASSWORD` por una contraseña nueva** y desplegar nuevamente. El correo de acceso es el valor de `ADMIN_EMAIL`. Cambiar la contraseña invalida las sesiones antiguas de esa cuenta; no borres `DATABASE_URL` ni restablezcas Neon. El inicio de sesión tiene bloqueo temporal por intentos fallidos.
+
+Para que **ambos reciban las notificaciones comerciales**, actualiza la Web App con `integrations/google-apps-script/villabyte-mail-v2.gs` y configura en las **Propiedades del script**:
+
+| Propiedad Apps Script | Valor |
+| --- | --- |
+| `DESTINATION_EMAIL` | `jonasvillavicencio845@gmail.com` |
+| `SECONDARY_NOTIFICATION_EMAIL` | Correo real de la segunda administradora |
+| `API_KEY` | La misma clave guardada como `GOOGLE_APPS_SCRIPT_KEY` en Cloudflare |
+| `REPLY_API_KEY` | La misma clave guardada como `GOOGLE_APPS_SCRIPT_REPLY_KEY` en Cloudflare |
+
+El segundo destinatario se establece en propiedades privadas, no en el formulario público. MailApp envía el aviso al propietario y una copia a la administradora; el acceso al CMS sigue siendo independiente del envío de correos. No ejecutar la función heredada `configurarApiComercial()` del código antiguo: contiene un correo de destino diferente y una API key de demostración, y podría sobrescribir propiedades.
+
+Después de guardar, publicar nueva versión desde Apps Script, volver a desplegar Pages, probar `/api/health` y un formulario controlado. El campo `mail_configured` solo informa que la clave existe, **no verifica la entrega real**.
+
 ## Desarrollo local
 
 Node.js 22+.
